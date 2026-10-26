@@ -280,6 +280,7 @@ print_clash_config() {
     printf '%s\n' '    client-fingerprint: chrome'
     printf '%s\n' '    network: tcp'
     printf '%s\n' '    reality-opts:'
+    printf '%s\n' '      support-x25519mlkem768: true'
     printf '%s\n' "      public-key: \"${REALITY_PUBLIC_KEY}\""
     printf '%s\n' "      short-id: \"${REALITY_SHORT_ID}\""
     printf '%s\n' '    encryption: ""'
