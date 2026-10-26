@@ -96,39 +96,8 @@ def recognize_caddy(text, combined):
 
 
 def validate_unit(root, service):
-    """Known upstream units are accepted; arbitrary execution hooks are not."""
-    commands = {'xray.service': '/usr/local/bin/xray run -config /usr/local/etc/xray/config.json',
-                'caddy.service': '/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile',
-                'hysteria-server.service': '/usr/local/bin/hysteria server --config /etc/hysteria/config.yaml'}
-    paths = []
-    for base in ('usr/lib/systemd/system', 'lib/systemd/system', 'etc/systemd/system'):
-        if base.startswith('lib/') and (root / 'lib').is_symlink():
-            continue  # Standard usr-merged Linux; inspected through /usr/lib above.
-        p = safe_path(root, base + '/' + service)
-        if p.exists():
-            paths = [p]
-    for base in ('usr/lib/systemd/system', 'lib/systemd/system', 'etc/systemd/system'):
-        if base.startswith('lib/') and (root / 'lib').is_symlink():
-            continue
-        d = root / base / (service + '.d')
-        if d.exists():
-            for p in sorted(d.glob('*.conf')):
-                safe_path(root, str(p.relative_to(root)))
-                paths.append(p)
-    for p in paths:
-        for line in p.read_text().splitlines():
-            line = line.strip()
-            if line.startswith(('ExecStart=', 'ExecStartPre=', 'ExecStartPost=', 'ExecStop=', 'ExecStopPost=', 'ExecReload=')):
-                key, value = line.split('=', 1)
-                if not value:
-                    continue
-                allowed = [commands[service]]
-                if service == 'caddy.service':
-                    allowed += [commands[service] + ' --adapter caddyfile',
-                                '/usr/bin/caddy reload --config /etc/caddy/Caddyfile --force',
-                                '/usr/bin/caddy reload --config /etc/caddy/Caddyfile --force --adapter caddyfile']
-                if value not in allowed or (key != 'ExecStart' and not (key == 'ExecReload' and service == 'caddy.service')):
-                    raise ValueError(f'Unmanaged service command in {p.name}')
+    from service_units import validate_service
+    validate_service(root, service, safe_path)
 
 
 def inspect_installation(root: Path) -> dict:

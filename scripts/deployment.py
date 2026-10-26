@@ -200,7 +200,7 @@ StateDirectory={user}
 WantedBy=multi-user.target
 '''
             if service == 'caddy.service':
-                text = text.replace('UMask=0077', 'Environment=XDG_DATA_HOME=/var/lib/caddy\nEnvironment=XDG_CONFIG_HOME=/var/lib/caddy\nUMask=0077')
+                text = text.replace('UMask=0077', 'Environment=XDG_DATA_HOME=/var/lib/caddy/.local/share\nEnvironment=XDG_CONFIG_HOME=/var/lib/caddy/.config\nUMask=0077')
             atomic_write(safe_path(self.root, 'etc/systemd/system/' + service), text, 0o644)
         if mode == 'hy2':
             for relative in ('var/lib/hysteria', 'var/lib/hysteria/acme'):
