@@ -1,0 +1,14 @@
+{
+  "listen": ":443",
+  "acme": {
+    "domains": [],
+    "email": "",
+    "ca": "letsencrypt",
+    "type": "http",
+    "dir": "/var/lib/hysteria/acme"
+  },
+  "auth": {
+    "type": "password",
+    "password": ""
+  }
+}
