@@ -7,7 +7,7 @@ source "${PROJECT_DIR}/install.sh"
 
 UUID="11111111-1111-4111-8111-111111111111"
 DOMAIN="example.com"
-HTTPS_PORT="8443"
+HTTPS_PORT="443"
 REALITY_SNI="swscan.apple.com"
 REALITY_PUBLIC_KEY="public-key"
 REALITY_PRIVATE_KEY="private-key-must-not-appear"
@@ -42,9 +42,15 @@ reality_output="$(print_clash_config)"
 assert_contains "${reality_output}" 'name: "raystack-reality"'
 assert_contains "${reality_output}" 'flow: xtls-rprx-vision'
 assert_contains "${reality_output}" 'public-key: "public-key"'
+assert_contains "${reality_output}" 'support-x25519mlkem768: true'
 assert_not_contains "${reality_output}" "${REALITY_PRIVATE_KEY}"
 
-MODE="both"
-both_output="$(print_clash_config)"
-assert_contains "${both_output}" 'name: "raystack-ws"'
-assert_contains "${both_output}" 'name: "raystack-reality"'
+MODE="hy2"
+HY2_PASSWORD="test-password"
+hy2_output="$(print_clash_config)"
+assert_contains "${hy2_output}" 'type: hysteria2'
+assert_contains "${hy2_output}" 'password: "test-password"'
+assert_contains "${hy2_output}" 'sni: "example.com"'
+assert_contains "${hy2_output}" 'skip-cert-verify: false'
+assert_not_contains "${hy2_output}" 'uuid:'
+assert_not_contains "${hy2_output}" 'raystack-reality'

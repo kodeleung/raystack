@@ -4,7 +4,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-for mode in ws reality both; do
+for mode in ws reality; do
   rendered="$(mktemp)"
   trap 'rm -f "${rendered}"' EXIT
 
