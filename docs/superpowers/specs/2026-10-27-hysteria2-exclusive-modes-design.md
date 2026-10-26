@@ -14,9 +14,12 @@ The installer offers exactly:
 3. Hysteria 2 (`hy2`).
 
 Reinstalling the same mode reuses credentials. Selecting another installed mode
-stops before changing packages, credentials, configurations, or services. Existing
-mixed-mode installations also stop with a manual cleanup explanation. Switching
-or uninstalling modes automatically is outside scope.
+automatically uninstalls the old raystack mode and installs the selected mode.
+Existing recognizable raystack mixed-mode installations are also consolidated
+into the selected single mode. The user's selection authorizes this switch;
+do not require another confirmation during installation. Preserve backups,
+credentials, and certificate state so failed switches can recover and later
+reinstalls can reuse them. A standalone uninstall command is outside scope.
 
 ## Architecture and files
 
@@ -39,29 +42,57 @@ an additional YAML package dependency: render Hysteria's configuration as JSON,
 which is also valid YAML, into the official `/etc/hysteria/config.yaml` path.
 Unrecognized preexisting configurations are treated as unmanaged, not overwritten.
 
-## Installation detection and conflict prevention
+## Installation detection and mode switching
 
 Run detection after selecting a mode and before installation side effects.
 
 - Persist a successful mode in `/etc/raystack/mode`, written atomically only
   after service startup checks pass. It is a hint, not the sole source of truth.
-- Inspect existing Xray inbound settings. A WebSocket VLESS inbound identifies
+- Inspect existing Xray inbound settings and raystack-specific structure. A WebSocket VLESS inbound identifies
   `ws`; a REALITY VLESS inbound identifies `reality`; both identify legacy mixed
   mode. Recognize previous raystack installations that predate the marker.
 - Inspect Hysteria configuration and service presence as well as Xray. A valid
   HY2 configuration together with Xray configuration is a mixed installation.
 - Credential files and an unused binary alone do not prove a mode is installed.
-- A conflicting marker, malformed configuration, or unrecognized managed-path
-  configuration produces a diagnostic and stops without overwriting it.
+- A marker/configuration inconsistency, malformed configuration, or unrecognized
+  managed-path configuration produces a diagnostic and stops without overwriting
+  it. A marker that correctly identifies a different mode triggers switching,
+  not a conflict error. An inbound protocol alone is insufficient proof of ownership.
 - Preserve unrelated services. Check required listening sockets and identify
-  their owners. Occupied ports owned by the recognized same-mode services allow
-  reinstallation; unrelated owners stop the install. An unmanaged active Caddy
+  their owners. Occupied ports owned by recognized raystack services allow
+  reinstalling or switching; unrelated owners stop the install. An unmanaged active Caddy
   must not have its configuration overwritten by WebSocket installation.
 - Use an installer lock so two runs cannot pass preflight and write concurrently.
 
-Only a clean server or a recognized installation of the selected single mode can
-proceed. Do not silently disable services, remove configurations, or migrate a
-legacy mixed deployment.
+A clean server or recognized raystack installation can proceed. Print the
+detected old mode(s) and selected new mode before switching. Never uninstall,
+stop, or overwrite unrelated services, even if their names or ports overlap.
+
+Switching uses a staged transaction:
+
+1. Collect and validate new inputs, check unrelated port conflicts, download or
+   install the new runtime without starting its service, render and validate the
+   new configuration, and back up the old configuration, unit/drop-ins, mode
+   marker, and service enabled/active state. If an upstream installer starts
+   services automatically, suppress that behavior or use a controlled binary
+   installation path instead. Do not disrupt the old mode during preparation.
+2. Stop and disable old mode services. For WS/REALITY changes, reuse Xray as a
+   shared runtime and replace its configuration; remove the old WS Caddy setup
+   when leaving WS. When moving between Xray modes and HY2, stop and disable all
+   old mode services and remove their recognized active configuration and
+   raystack-owned service definitions/drop-ins so they cannot restart later.
+3. Install the staged configuration and start only the selected mode. After
+   successful readiness checks, atomically record the new mode. Remove obsolete
+   dedicated raystack-owned runtime files only after the new mode succeeds.
+   Preserve shared packages and anything without proven raystack ownership;
+   an unused shared binary does not count as an installed proxy mode.
+4. Preserve root-only backups under `/etc/raystack/backups/`, plus credential
+   files and ACME state. Do not run broad package purges or delete unrelated
+   Caddy sites. Refuse an unsafe ambiguous deployment before stopping services.
+
+Legacy mixed-mode cleanup follows the same transaction and leaves exactly the
+selected mode enabled. A short outage during the actual switch is expected and
+must be mentioned in the README and install output.
 
 ## HY2 configuration and certificates
 
@@ -101,11 +132,14 @@ For HY2, perform structural validation, followed by bounded startup and readines
 checks, accounting for initial ACME issuance. Treat service exit, ACME errors, or
 readiness timeout as failure and show the relevant journal command.
 
-Back up replaced same-mode configurations. On startup failure, restore the old
-configuration and attempt to restore the previously running same-mode service.
-Preserve credentials and ACME state for retry. Never print installation success
-or write a successful mode marker after a failed startup. If rollback fails,
-report that explicitly.
+Back up replaced configurations for both reinstalls and mode switches. On
+startup failure, stop/disable the failed new mode, restore the old configurations,
+service definitions/drop-ins, marker, and enabled/active states, and attempt to
+restore the previously running old service(s). If there was no prior mode,
+remove the failed new mode's active configuration while preserving diagnostic
+backups and reusable credentials. Preserve credentials and ACME state for retry.
+Never print installation success or write a successful mode marker after a
+failed startup. If rollback fails, report that explicitly.
 
 A successful local install means the selected service is running and listening
 on its expected socket(s). Certificate issuance and an authenticated external
@@ -128,14 +162,17 @@ Serialize user-provided values safely rather than interpolating unescaped YAML.
 ## Verification and documentation
 
 Update README installation options, architecture, runtime files, certificate
-requirements, required ports, conflict behavior, and removal of combined mode.
+requirements, required ports, automatic mode switching and its brief outage,
+backup locations, unrelated-service conflict behavior, and removal of combined mode.
 Preserve historical design documents as history.
 
 Run shell syntax checks, existing credential parsing tests, and updated template
 and client-output tests. Add meaningful regression coverage for legacy mixed
-mode detection, cross-mode rejection before side effects, same-mode reinstall,
+mode detection, each directed switch among the three modes, legacy mixed-mode
+consolidation, preparation failure leaving the old mode running, same-mode reinstall,
 unmanaged/occupied resources, HY2-only service selection, password persistence
-and permissions, ACME configuration, safe rendering, and startup failure/rollback.
+and permissions, ACME configuration, safe rendering, removal of obsolete active
+mode resources, and startup failure/rollback restoring old service states.
 Use temporary roots and command stubs so local tests cannot install packages,
 rewrite real `/etc` files, or restart services. Validate the generated client
 configuration with an available Mihomo binary. Where feasible, validate real
