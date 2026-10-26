@@ -36,5 +36,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(calls, ['reality', 'ws'])
         run.assert_not_called()
 
+    def test_hy2_uses_current_official_repository(self):
+        self.assertEqual(runtime.REPO['hy2'], 'HyNetworks/hysteria')
+
 
 if __name__ == '__main__': unittest.main()

@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 BINARY = {'reality': '/usr/local/bin/xray', 'ws': '/usr/bin/caddy', 'hy2': '/usr/local/bin/hysteria'}
-REPO = {'reality': 'XTLS/Xray-core', 'ws': 'caddyserver/caddy', 'hy2': 'apernet/hysteria'}
+REPO = {'reality': 'XTLS/Xray-core', 'ws': 'caddyserver/caddy', 'hy2': 'HyNetworks/hysteria'}
 
 
 def capture(args):
