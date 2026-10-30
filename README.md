@@ -150,12 +150,56 @@ The container publishes no host ports, mounts this repository read-only, and
 checks trusted test-certificate traffic and wrong-password rejection. It does
 not test public ACME issuance, cloud firewalls, or production domain connectivity.
 
-## Experimental traffic subscription
+## Traffic subscription
 
-The earlier traffic subscription prototype is retained in `scripts/traffic.py`,
-`scripts/client_config.py`, `scripts/subscription_server.py`, and
-`scripts/install_traffic.sh`. It is not integrated with the exclusive-mode
-installer and should not be deployed. The prototype needs integration with mode
-switching and rollback, HY2 support, and Linux runtime validation before use.
-Existing installations using its modified Caddy configuration may be rejected by
-the installer's ownership checks; inspect the deployment before changing modes.
+The installer asks whether to enable the subscription (default yes), then asks
+for monthly quota in **GB**, reset day (1–31), billing timezone (Beijing, UTC,
+or a custom IANA name), public network interface, and outbound-only or
+bidirectional accounting. One GB is 1,000,000,000 bytes. Python 3.9 or newer and
+system timezone data are required. vnStat 2.x is installed when needed.
+
+For REALITY, enter a subscription domain pointing directly to the VPS; it is
+also used as the node address. WS and HY2 reuse their node domain. Installation
+prints a private **Subscription URL** for import as a remote configuration in
+Clash Party. It contains credentials; keep it secret. Refresh the subscription
+to refresh usage; the suggested refresh interval is one hour. Fresh statistics
+may take about a minute to become available; retry import after initialization.
+
+- WS subscription: `https://your-domain/subscription/<token>` (TCP 443).
+- REALITY and HY2 subscription: `https://your-domain:8443/subscription/<token>`.
+- Enable inbound TCP 80 for automatic certificates, plus the subscription port.
+  DNS must point directly to this server with no broken AAAA record.
+- Enabling subscriptions uses a raystack-managed Caddy service in every mode.
+  It refuses to take over unrelated services or occupied subscription ports.
+  With subscriptions disabled, REALITY/HY2 do not require a Caddy configuration.
+- HY2 HTTP-01 validation is forwarded by Caddy to its local ACME listener on
+  port 8888, including certificate renewal. UDP 443 remains the HY2 data port.
+
+The new cycle starts at midnight in the selected billing timezone without
+changing the VPS system timezone or deleting statistics. Missing days 29–31
+are clamped to the end of that month. Quota is informational: exceeding it does
+not stop the proxy. Accounting counts the whole selected network interface,
+including other VPS services. Provider totals can differ. Only traffic observed
+since activation is counted; earlier monthly usage is not reconstructed.
+
+Quota, accounting and reset-day changes reuse retained statistics. Reinstalling
+or switching proxy modes preserves the token and database and updates the
+subscription nodes. Changing the interface/timezone is rejected to avoid mixing
+incompatible historical records. Disabling the feature stops its services and
+retains private settings and statistics for later re-enabling.
+
+Runtime settings are private in `/etc/raystack/traffic.json`; statistics live in
+`/var/lib/raystack/vnstat`. Services are `raystack-vnstat.service` and
+`raystack-subscription.service`, alongside the applicable proxy/Caddy services.
+Configuration and service changes participate in the installer backup/rollback.
+Database samples and downloaded binaries are retained across rollback.
+
+Run the disposable Linux subscription smoke test (no published host ports or
+production certificate requests):
+
+```bash
+RAYSTACK_SUBSCRIPTION_RUNTIME_TEST=1 bash tests/test_subscription_linux.sh
+```
+
+Containers are removed automatically. Public DNS, ACME issuance and a real
+Clash Party import still require verification on the target VPS.

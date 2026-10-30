@@ -35,6 +35,10 @@ class BillingTests(unittest.TestCase):
             settings['accounting'] = 'outbound'
             usage = query_usage(settings, datetime(2026, 10, 16, tzinfo=timezone.utc))
             self.assertEqual((usage['upload'], usage['download']), (0, 7))
+        fixture['interfaces'][0]['traffic']['day'] = []
+        with patch('subprocess.check_output', return_value=json.dumps(fixture).encode()):
+            with self.assertRaises(StatisticsUnavailable):
+                query_usage(settings, datetime(2026, 10, 16, tzinfo=timezone.utc))
         with patch('subprocess.check_output', return_value=b'bad json'):
             with self.assertRaises(StatisticsUnavailable):
                 query_usage(settings, datetime(2026, 10, 16, tzinfo=timezone.utc))

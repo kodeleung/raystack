@@ -49,7 +49,8 @@ def atomic_write(path, data, mode=0o600, gid=None):
 def snapshot_installation(root: Path, state: dict, backup_dir: Path, service_states: dict, target_mode=None) -> None:
     backup_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
     backup_dir.chmod(0o700)
-    paths = list(dict.fromkeys(state['managed_paths'] + (CONFIGS[target_mode] if target_mode else ALL_CONFIGS) + [MODE_PATH]))
+    from subscription_deployment import PATHS
+    paths = list(dict.fromkeys(state['managed_paths'] + (CONFIGS[target_mode] if target_mode else ALL_CONFIGS) + [MODE_PATH] + PATHS))
     for service in (service_states if target_mode else ALL_SERVICES):
         paths.append('etc/systemd/system/' + service)
         directory = safe_path(root, 'etc/systemd/system/' + service + '.d')
@@ -176,8 +177,8 @@ class Deployment:
             if values.get(field):
                 atomic_write(safe_path(self.root, 'etc/raystack/' + name), values[field] + '\n')
 
-    def write_units(self, mode):
-        for service in SERVICES[mode]:
+    def write_units(self, mode, services=None):
+        for service in (services if services is not None else SERVICES[mode]):
             user = ACCOUNTS[service]
             text = f'''# Managed by raystack
 [Unit]
@@ -213,21 +214,22 @@ WantedBy=multi-user.target
                     os.chown(path, user.pw_uid, user.pw_gid)
 
     def remove_mode_resources(self, state, mode):
+        target_services = getattr(self, 'target_services', SERVICES[mode])
         for name in state['managed_paths']:
-            if name not in CONFIGS[mode]:
+            if name not in CONFIGS[mode] and not (name == 'etc/caddy/Caddyfile' and 'caddy.service' in target_services):
                 safe_path(self.root, name).unlink(missing_ok=True)
-        for service in set(state['services']) | set(SERVICES[mode]):
+        for service in set(state['services']) | set(target_services):
             directory = safe_path(self.root, 'etc/systemd/system/' + service + '.d')
             if directory.exists():
                 for path in directory.iterdir():
                     path.unlink()
-            if service not in SERVICES[mode]:
+            if service not in target_services:
                 safe_path(self.root, 'etc/systemd/system/' + service).unlink(missing_ok=True)
 
     def rollback(self, backup, target):
         errors = []
         # Attempt every restoration even if one service operation fails.
-        for service in SERVICES[target]:
+        for service in getattr(self, 'target_services', SERVICES[target]):
             for verb in ('stop', 'disable'):
                 try:
                     self.services.action(verb, service)
@@ -250,29 +252,77 @@ WantedBy=multi-user.target
         if errors:
             raise RuntimeError('; '.join(errors))
 
-    def install(self, mode, values, prepare=prepare_runtime):
+    def install(self, mode, values, prepare=prepare_runtime, subscription=None):
         with self.lock():
-            return self._install(mode, values, prepare)
+            return self._install(mode, values, prepare, subscription)
 
-    def _install(self, mode, values, prepare):
+    def _install(self, mode, values, prepare, subscription):
         state = inspect_installation(self.root, replace_xray=True, selected_mode=mode)
-        affected = list(dict.fromkeys(state['services'] + SERVICES[mode]))
+        from subscription_deployment import SERVICES as SUB_SERVICES, resources, caddy_config, initialize, prepare_dependencies
+        old_subscription = safe_path(self.root, 'etc/raystack/traffic.json').exists()
+        self.target_services = list(SERVICES[mode]) + (['caddy.service'] if subscription and mode != 'ws' else []) + (SUB_SERVICES if subscription else [])
+        affected = list(dict.fromkeys(state['services'] + self.target_services + (SUB_SERVICES if old_subscription else [])))
         previous_states = {s: self.services.state(s) for s in affected}
         for service in affected:
-            validate_unit(self.root, service)
+            if service not in SUB_SERVICES:
+                validate_unit(self.root, service)
+            if service in SUB_SERVICES:
+                for prefix in ('etc/systemd/system', 'run/systemd/system', 'usr/lib/systemd/system', 'lib/systemd/system'):
+                    dropins = safe_path(self.root, prefix + '/' + service + '.d')
+                    if dropins.exists() and any(dropins.iterdir()):
+                        raise ValueError(f'{service} has custom systemd overrides')
+                    if prefix != 'etc/systemd/system' and safe_path(self.root, prefix + '/' + service).exists():
+                        raise ValueError(f'{service} has an unmanaged systemd unit')
+                existing = safe_path(self.root, 'etc/systemd/system/' + service)
+                if existing.exists() and not existing.read_text().startswith('# Managed by raystack\n'):
+                    raise ValueError(f'{service} is not owned by the subscription installer')
+                if old_subscription:
+                    continue
             if service not in state['services'] and (previous_states[service]['active'] or previous_states[service]['enabled'] == 'enabled'):
                 raise ValueError(f'{service} is enabled without a recognized configuration; refusing to replace it')
         validate_listeners(state, mode, self.services.sockets(state['services']))
         values, pairs = self.credentials(mode, values)
         files = render_configs(mode, values)
         values = validate_values(mode, values)
+        if subscription:
+            caddy_path = safe_path(self.root, 'etc/caddy/Caddyfile')
+            if caddy_path.exists() and 'etc/caddy/Caddyfile' not in state['managed_paths']:
+                raise ValueError('Subscription HTTPS requires Caddy; existing unrelated Caddy configuration will not be replaced')
+            sockets = self.services.sockets(affected)
+            for sock in sockets:
+                if sock['transport'] == 'tcp' and sock['port'] in (80, 8443, 8765):
+                    allowed = set(state['services']) | (set(SUB_SERVICES) if old_subscription else set())
+                    if sock.get('service') not in allowed:
+                        raise ValueError(f"Subscription port {sock['port']}/tcp is occupied by an unrelated service")
+        subscription_config = None
+        if subscription:
+            subscription_config, extra = resources(self.root, mode, values, subscription)
+            files.update(extra)
+            base = files.get('etc/caddy/Caddyfile')
+            files['etc/caddy/Caddyfile'] = caddy_config(mode, subscription_config['subscription_domain'], base)
+            if mode == 'hy2':
+                hy2 = json.loads(files['etc/hysteria/config.yaml'])
+                hy2['acme']['http'] = {'altPort': 8888}
+                files['etc/hysteria/config.yaml'] = json.dumps(hy2)
+            # Include extra target configs in the snapshot even on fresh installations.
+            state['managed_paths'] = list(dict.fromkeys(state['managed_paths'] + ['etc/caddy/Caddyfile']))
         print(f"[raystack] Mode: {', '.join(state['modes']) or 'none'} -> {mode}", flush=True)
         prepare(mode)
+        if subscription and self.live:
+            prepare_dependencies()
+            from runtime_install import ensure_account
+            ensure_account('raystack')
+            if mode != 'ws':
+                from runtime_install import ensure_binary, ensure_account
+                ensure_binary('ws')
+                ensure_account('caddy')
         with tempfile.TemporaryDirectory(prefix='raystack-stage-') as temp:
             stage = Path(temp)
             for name, text in files.items():
                 atomic_write(stage / name, text)
             self.services.validate(mode, stage)
+            if subscription and self.live and mode != 'ws':
+                subprocess.run(['/usr/bin/caddy', 'validate', '--config', str(stage / 'etc/caddy/Caddyfile'), '--adapter', 'caddyfile'], check=True)
             # Recheck ports after downloads before making the old mode unavailable.
             validate_listeners(state, mode, self.services.sockets(state['services']))
             backup_root = safe_path(self.root, 'etc/raystack/backups')
@@ -284,20 +334,37 @@ WantedBy=multi-user.target
             self.write_credentials(values, pairs)
             print('[raystack] Applying selected mode; existing connections may briefly disconnect.', flush=True)
             try:
-                for service in state['services']:
+                for service in list(dict.fromkeys(state['services'] + (SUB_SERVICES if old_subscription else []))):
                     self.services.action('stop', service)
                     self.services.action('disable', service)
                 self.remove_mode_resources(state, mode)
                 for name in files:
+                    if name.startswith('etc/raystack/') or name.startswith('etc/systemd/'):
+                        atomic_write(safe_path(self.root, name), (stage / name).read_bytes(), 0o644 if name.endswith('.service') else 0o600)
+                        continue
                     service = 'hysteria-server.service' if name.startswith('etc/hysteria') else ('caddy.service' if name.startswith('etc/caddy') else 'xray.service')
                     gid = grp.getgrnam(ACCOUNTS[service]).gr_gid if self.live else None
                     atomic_write(safe_path(self.root, name), (stage / name).read_bytes(), 0o640, gid)
                 self.write_units(mode)
+                if subscription and mode != 'ws':
+                    self.write_units('ws', ['caddy.service'])
+                if subscription and self.live:
+                    initialize(subscription_config)
+                if not subscription and old_subscription:
+                    retained = json.loads(safe_path(self.root, 'etc/raystack/traffic.json').read_text())
+                    retained['enabled'] = False
+                    atomic_write(safe_path(self.root, 'etc/raystack/traffic.json'), json.dumps(retained))
                 self.services.action('daemon-reload')
-                for service in SERVICES[mode]:
+                for service in self.target_services:
                     self.services.action('enable', service)
                     self.services.action('start', service)
                 self.services.wait(mode)
+                if subscription and self.live:
+                    for service in self.target_services:
+                        if not self.services.state(service)['active']:
+                            raise RuntimeError(f'{service} failed to start')
+                    from subscription_deployment import wait_https
+                    wait_https(subscription_config)
                 atomic_write(safe_path(self.root, MODE_PATH), mode + '\n')
             except BaseException as exc:
                 print('[raystack] Installation failed; restoring previous mode.', file=sys.stderr, flush=True)
@@ -306,11 +373,16 @@ WantedBy=multi-user.target
                 except BaseException as rollback_error:
                     raise RuntimeError(f'{exc}; rollback also failed: {rollback_error}; backup: {backup}') from exc
                 raise
+        if subscription_config:
+            from subscription_deployment import url
+            print('[raystack] Subscription URL: ' + url(subscription_config), flush=True)
+            print('[raystack] Usage may need a minute to initialize. Allow TCP 80 and ' + ('443' if mode == 'ws' else '8443') + ' for HTTPS subscriptions.', flush=True)
         return values
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--subscription-options', type=Path)
     parser.add_argument('--mode', choices=['ws', 'reality', 'hy2'], required=True)
     args = parser.parse_args()
     if os.geteuid() != 0:
@@ -319,7 +391,8 @@ if __name__ == '__main__':
         raise KeyboardInterrupt(f'Interrupted by signal {signum}')
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        result = Deployment(Path('/')).install(args.mode, json.load(sys.stdin))
+        options = json.loads(args.subscription_options.read_text()) if args.subscription_options else None
+        result = Deployment(Path('/')).install(args.mode, json.load(sys.stdin), subscription=options)
         from print_client_config import print_client_config
         print('[raystack] Installation complete; selected service is running and listening.')
         if args.mode == 'hy2':

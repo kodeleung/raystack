@@ -87,9 +87,14 @@ main() {
   prompt_mode
   prompt_mode_parameters
   # Do not start deployment when input preparation fails. Credentials stay in memory.
-  local prepared
+  local prepared options_file
+  options_file="$(mktemp)"
+  chmod 600 "$options_file"
+  trap 'rm "${SUBSCRIPTION_OPTIONS_FILE}"' EXIT
+  SUBSCRIPTION_OPTIONS_FILE="$options_file"
+  python3 "${SCRIPTS_DIR}/subscription_prompts.py" "$MODE" "$DOMAIN" > "$options_file" || return 1
   prepared="$(python3 "${SCRIPTS_DIR}/installer_input.py" "$MODE" "$DOMAIN" "$EMAIL" "$REALITY_DEST" "$REALITY_SNI")" || return 1
-  printf '%s\n' "$prepared" | python3 "${SCRIPTS_DIR}/deployment.py" --mode "$MODE"
+  printf '%s\n' "$prepared" | python3 "${SCRIPTS_DIR}/deployment.py" --mode "$MODE" --subscription-options "$options_file"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

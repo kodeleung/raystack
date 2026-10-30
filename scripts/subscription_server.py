@@ -10,6 +10,10 @@ from traffic import query_usage, StatisticsUnavailable
 
 def make_server(settings, nodes, token, host='127.0.0.1', port=8765):
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(10)
+
         def log_message(self, *args):
             pass
 

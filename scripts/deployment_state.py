@@ -113,6 +113,16 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
         if selected_mode not in ('reality', 'hy2'):
             raise
         caddy = None
+    subscription_caddy = False
+    saved_subscription = load_json(root, 'etc/raystack/traffic.json')
+    if saved_subscription and saved_subscription.get('enabled', True) and caddy is not None:
+        from subscription_deployment import caddy_config
+        node = saved_subscription.get('nodes', {})
+        mode = node.get('mode')
+        if mode in ('ws', 'reality', 'hy2'):
+            base = (Path(__file__).resolve().parent.parent / 'config/Caddyfile').read_text().replace('__DOMAIN__', node.get('domain', '')).replace('__HTTPS_PORT__', '443')
+            expected = caddy_config(mode, saved_subscription.get('subscription_domain', node.get('domain', '')), base)
+            subscription_caddy = re.sub(r'\s+', '', caddy) == re.sub(r'\s+', '', expected)
     caddy_known = caddy is not None and (recognize_caddy(caddy, False) or recognize_caddy(caddy, True))
     replacing_unknown_xray = False
     try:
@@ -128,7 +138,7 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
         else:
             modes = ['reality']
     if caddy is not None:
-        if not (('ws' in modes and recognize_caddy(caddy, 'reality' in modes)) or
+        if not (subscription_caddy or ('ws' in modes and recognize_caddy(caddy, 'reality' in modes)) or
                 ('reality' in modes and recognize_caddy(caddy, True))):
             if selected_mode not in ('reality', 'hy2') or 'ws' in modes:
                 raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')

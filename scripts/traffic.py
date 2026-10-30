@@ -53,17 +53,25 @@ def query_usage(settings, now):
         if not days:
             raise ValueError('empty statistics')
         upload = download = 0
+        cycle_days = set()
         for item in days:
             d = item['date']
             day = date(d['year'], d['month'], d['day'])
             if start.date() <= day < end.date():
+                if day in cycle_days:
+                    raise ValueError("duplicate daily statistics")
+                cycle_days.add(day)
                 rx, tx = item['rx'], item['tx']
                 if not isinstance(rx, int) or not isinstance(tx, int) or min(rx, tx) < 0:
                     raise ValueError('invalid counters')
                 upload += rx
                 download += tx
+        if not cycle_days:
+            raise ValueError('no statistics in current cycle')
         if settings['accounting'] == 'outbound':
             upload = 0
+        elif settings['accounting'] != 'both':
+            raise ValueError('invalid accounting mode')
         return {'upload': upload, 'download': download, 'total': settings['quota_bytes'], 'next_reset': int(end.timestamp())}
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, StopIteration) as exc:
         raise StatisticsUnavailable('vnStat data unavailable') from exc

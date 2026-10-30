@@ -40,7 +40,10 @@ ProtectHome=true
 [Install]
 WantedBy=multi-user.target
 UNIT
-# vnStat 2 creates the interface database on --add, retaining an existing database.
+# Initialize a fresh database before adding an interface; preserve existing data.
+if [[ ! -f /var/lib/raystack/vnstat/vnstat.db ]]; then
+  ${SUDO} env TZ="${zone}" vnstatd --config /etc/raystack/vnstat.conf --initdb --noadd
+fi
 if ! ${SUDO} vnstat --config /etc/raystack/vnstat.conf --iflist 1 2>/dev/null | grep -Fxq "${iface}"; then
   echo "Network interface not found: ${iface}" >&2
   exit 1

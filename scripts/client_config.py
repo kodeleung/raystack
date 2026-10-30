@@ -5,6 +5,8 @@ import json
 def render_nodes(s):
     q = lambda x: json.dumps(x, ensure_ascii=True)
     lines = ['proxies:']
+    if s['mode'] == 'hy2':
+        lines += ['  - name: raystack-hy2', '    type: hysteria2', '    server: ' + q(s['domain']), '    port: 443', '    password: ' + q(s['hy2_password']), '    sni: ' + q(s['domain']), '    skip-cert-verify: false']
     if s['mode'] in ('ws', 'both'):
         lines += ['  - name: raystack-ws', '    type: vless', '    server: ' + q(s['domain']), '    port: ' + str(s['https_port']), '    uuid: ' + q(s['uuid']), '    udp: true', '    tls: true', '    servername: ' + q(s['domain']), '    network: ws', '    ws-opts:', '      path: /ray', '    encryption: ""']
     if s['mode'] in ('reality', 'both'):
@@ -14,6 +16,7 @@ def render_nodes(s):
 
 def render_profile(s, next_reset, timezone):
     names = []
+    if s['mode'] == 'hy2': names.append('raystack-hy2')
     if s['mode'] in ('ws', 'both'): names.append('raystack-ws')
     if s['mode'] in ('reality', 'both'): names.append('raystack-reality')
     return ('# Next reset (Unix timestamp): %d; timezone: %s\n' % (next_reset, json.dumps(timezone)) + render_nodes(s) + 'proxy-groups:\n  - name: Proxy\n    type: select\n    proxies:\n' + ''.join('      - ' + n + '\n' for n in names) + '      - DIRECT\nrules:\n  - MATCH,Proxy\n')
