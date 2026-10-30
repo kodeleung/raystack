@@ -64,7 +64,7 @@ class SubscriptionDeploymentTests(unittest.TestCase):
         xray.write_text('{"legacy": true}')
         caddy = self.root / 'etc/caddy/Caddyfile'
         caddy.parent.mkdir(parents=True)
-        old = '# Package header\ndmit.shanbo.site:8443 {\n handle /ray* { reverse_proxy 127.0.0.1:10000 }\n handle { respond "OK" }\n}\n'
+        old = '# Package header\nlegacy.example.com:8443 {\n handle /ray* { reverse_proxy 127.0.0.1:10000 }\n handle { respond "OK" }\n}\n'
         caddy.write_text(old)
         self.services.states['caddy.service'] = {'enabled': 'enabled', 'active': True}
         self.services.states['xray.service'] = {'enabled': 'enabled', 'active': True}

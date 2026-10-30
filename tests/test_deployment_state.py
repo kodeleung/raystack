@@ -116,7 +116,7 @@ class DeploymentStateTests(unittest.TestCase):
         self.assertEqual(inspect_installation(self.root, replace_xray=True)['modes'], ['ws', 'reality'])
 
     def test_legacy_explicit_port_caddy(self):
-        text = '# Caddy package comment\ndmit.shanbo.site:8443 {\n    handle /ray* {\n        reverse_proxy 127.0.0.1:10000\n    }\n    handle {\n        respond "OK"\n    }\n}\n# Documentation footer\n'
+        text = '# Caddy package comment\nlegacy.example.com:8443 {\n    handle /ray* {\n        reverse_proxy 127.0.0.1:10000\n    }\n    handle {\n        respond "OK"\n    }\n}\n# Documentation footer\n'
         self.assertTrue(recognize_caddy(text, True))
         self.assertFalse(recognize_caddy(text, False))
         self.assertFalse(recognize_caddy(text + 'other.example { respond "hello" }', True))
