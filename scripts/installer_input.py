@@ -15,7 +15,7 @@ def encode(data):
     return base64.urlsafe_b64encode(data).decode().rstrip('=')
 
 
-def collect_values(mode, domain, email, reality_dest='swscan.apple.com:443', reality_sni='swscan.apple.com', root=Path('/')):
+def collect_values(mode, domain, email, reality_dest='www.bing.com:443', reality_sni='www.bing.com', root=Path('/')):
     # Reject unmanaged deployments before even preparing new credentials.
     inspect_installation(root, replace_xray=True, selected_mode=mode)
     if mode in ('ws', 'hy2'):

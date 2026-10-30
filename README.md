@@ -105,7 +105,7 @@ bandwidth tuning is enabled.
 | HY2 configuration (JSON, valid YAML) | `/etc/hysteria/config.yaml` |
 | HY2 certificate/ACME state | `/var/lib/hysteria/acme` |
 | WS internal listener/path | `127.0.0.1:10000`, `/ray` |
-| REALITY destination / SNI | `swscan.apple.com:443` / `swscan.apple.com` |
+| REALITY destination / SNI | `www.bing.com:443` / `www.bing.com` |
 
 Selected services: `xray.service` for REALITY, `xray.service` and `caddy.service`
 for WS, or `hysteria-server.service` for HY2. To inspect HY2 failures:
