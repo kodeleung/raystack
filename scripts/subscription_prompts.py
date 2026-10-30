@@ -5,10 +5,9 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from decimal import Decimal
 from zoneinfo import ZoneInfo
 from render_config import hostname
-from traffic import quota_bytes
+from traffic import quota_bytes, saved_quota_gb
 
 
 def ask(prompt, default=''):
@@ -35,8 +34,8 @@ def collect(mode, node_domain, root=Path('/')):
         except ValueError as exc:
             print(exc, file=sys.stderr)
     while True:
-        default_quota = str(Decimal(old['quota_bytes']) / Decimal(1000000000)) if old else ''
-        quota = ask(f'Monthly quota (GB) [{default_quota}]: ', default_quota)
+        default_quota = str(saved_quota_gb(old)) if old else ''
+        quota = ask(f'Monthly quota (GB, 1024-based) [{default_quota}]: ', default_quota)
         try:
             quota_bytes(quota)
             break

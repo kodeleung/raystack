@@ -155,7 +155,9 @@ not test public ACME issuance, cloud firewalls, or production domain connectivit
 The installer asks whether to enable the subscription (default yes), then asks
 for monthly quota in **GB**, reset day (1–31), billing timezone (Beijing, UTC,
 or a custom IANA name), public network interface, and outbound-only or
-bidirectional accounting. One GB is 1,000,000,000 bytes. Python 3.9 or newer and
+bidirectional accounting. One displayed GB is 1,073,741,824 bytes (1024³, technically GiB), matching
+Clash Party. Legacy decimal quotas retain the original entered amount when
+converted; usage counters are never multiplied or reset. Python 3.9 or newer and
 system timezone data are required. vnStat 2.x is installed when needed.
 
 For REALITY, enter a subscription domain pointing directly to the VPS; it is

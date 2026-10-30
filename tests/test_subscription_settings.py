@@ -9,7 +9,7 @@ class SubscriptionSettingsTests(unittest.TestCase):
         for mode in ('ws', 'reality', 'hy2'):
             values = {'domain': 'node.example.com', 'uuid': 'uuid', 'hy2_password': 'password'}
             a = build_settings(mode, values, '1.5', '31', 'Asia/Shanghai', 'eth0', 'both', 'sub.example.com')
-            self.assertEqual(a['traffic']['quota_bytes'], 1500000000)
+            self.assertEqual(a['traffic']['quota_bytes'], 1610612736)
             self.assertEqual(a['nodes']['node_address'], 'sub.example.com' if mode == 'reality' else 'node.example.com')
             b = build_settings(mode, values, '2', '1', 'Asia/Shanghai', 'eth0', 'outbound', 'sub.example.com', a)
             self.assertEqual(a['token'], b['token'])

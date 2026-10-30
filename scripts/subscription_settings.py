@@ -4,7 +4,7 @@ import re
 import secrets
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from render_config import hostname
-from traffic import quota_bytes
+from traffic import quota_bytes, GB_BYTES
 
 
 def build_settings(mode, values, quota, reset_day, timezone, interface, accounting,
@@ -35,6 +35,6 @@ def build_settings(mode, values, quota, reset_day, timezone, interface, accounti
     token = previous.get('token') or secrets.token_hex(32)
     if not re.fullmatch(r'[a-f0-9]{64}', token):
         raise ValueError('invalid stored subscription token')
-    return {'token': token, 'traffic': {'quota_bytes': quota_bytes(quota),
+    return {'token': token, 'traffic': {'quota_bytes': quota_bytes(quota), 'quota_unit_bytes': GB_BYTES,
              'reset_day': int(reset_day), 'timezone': timezone, 'interface': interface,
              'accounting': accounting}, 'nodes': nodes, 'subscription_domain': domain}

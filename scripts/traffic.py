@@ -1,18 +1,37 @@
 """Billing calendar helpers for the VPS traffic subscription."""
 import calendar
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
+
+
+GB_BYTES = 1024 ** 3
+LEGACY_GB_BYTES = 1000 ** 3
 
 
 def quota_bytes(value):
     try:
-        amount = Decimal(str(value)) * 1_000_000_000
-        if not amount.is_finite() or amount <= 0 or amount != amount.to_integral_value():
+        amount = Decimal(str(value)) * GB_BYTES
+        if not amount.is_finite() or amount <= 0:
             raise ValueError('quota must be a positive whole number of bytes')
-        return int(amount)
+        result = int(amount.to_integral_value(rounding=ROUND_HALF_UP))
+        if result <= 0:
+            raise ValueError("quota must be at least one byte")
+        return result
     except InvalidOperation as exc:
         raise ValueError('invalid quota') from exc
+
+
+def saved_quota_gb(settings):
+    unit = settings.get('quota_unit_bytes', LEGACY_GB_BYTES)
+    if unit not in (LEGACY_GB_BYTES, GB_BYTES):
+        raise ValueError('unknown quota unit')
+    return Decimal(settings['quota_bytes']) / Decimal(unit)
+
+
+def quota_total(settings):
+    """Read legacy decimal quotas using the original entered amount."""
+    return quota_bytes(saved_quota_gb(settings))
 
 
 def cycle_bounds(now, reset_day, timezone):
@@ -72,6 +91,6 @@ def query_usage(settings, now):
             upload = 0
         elif settings['accounting'] != 'both':
             raise ValueError('invalid accounting mode')
-        return {'upload': upload, 'download': download, 'total': settings['quota_bytes'], 'next_reset': int(end.timestamp())}
+        return {'upload': upload, 'download': download, 'total': quota_total(settings), 'next_reset': int(end.timestamp())}
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, StopIteration) as exc:
         raise StatisticsUnavailable('vnStat data unavailable') from exc
