@@ -32,13 +32,32 @@ class SubscriptionDeploymentTests(unittest.TestCase):
             config = json.loads((self.root / 'etc/raystack/traffic.json').read_text())
             if token: self.assertEqual(config['token'], token)
             token = config['token']
-            self.assertIn('Subscription URL: https://test.example.com', output)
+            self.assertIn('Subscription URL: https://test.example.com:9443/subscription/', output)
+            caddy_text = (self.root / 'etc/caddy/Caddyfile').read_text()
+            self.assertNotIn('https_port', caddy_text)
+            self.assertIn('test.example.com:9443 {', caddy_text)
+            if mode == 'reality':
+                self.assertEqual(json.loads((self.root / 'usr/local/etc/xray/config.json').read_text())['inbounds'][0]['port'], 8443)
             self.assertEqual(config['nodes']['mode'], mode)
             self.assertIn('caddy.service', inspect_installation(self.root)['services'])
             self.assertTrue(self.services.state('raystack-subscription.service')['active'])
             if mode == 'hy2':
                 cfg = json.loads((self.root / 'etc/hysteria/config.yaml').read_text())
                 self.assertEqual(cfg['acme']['http']['altPort'], 8888)
+    def test_previous_subscription_ports_can_be_upgraded(self):
+        from subscription_deployment import legacy_caddy_config
+        self.install('reality')
+        saved = json.loads((self.root / 'etc/raystack/traffic.json').read_text())
+        caddy = self.root / 'etc/caddy/Caddyfile'
+        caddy.write_text(legacy_caddy_config('reality', saved['subscription_domain']))
+        xray = self.root / 'usr/local/etc/xray/config.json'
+        config = json.loads(xray.read_text())
+        config['inbounds'][0]['port'] = 443
+        xray.write_text(json.dumps(config))
+        self.install('reality')
+        self.assertIn(':9443 {', caddy.read_text())
+        self.assertEqual(json.loads(xray.read_text())['inbounds'][0]['port'], 8443)
+
     def test_enabled_caddy_with_legacy_explicit_port_is_adopted(self):
         xray = self.root / 'usr/local/etc/xray/config.json'
         xray.parent.mkdir(parents=True)

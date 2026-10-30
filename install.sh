@@ -51,7 +51,7 @@ prompt_mode_parameters() {
   fi
   if [[ "$MODE" == hy2 ]]; then
     read -r -p 'Email for automatic certificate management: ' EMAIL || return 1
-    log 'Allow UDP 443 for HY2 and TCP 80 for certificate issuance and renewal.'
+    log 'Allow UDP 8443 for HY2 and TCP 80 for certificate issuance and renewal.'
   elif [[ "$MODE" == ws ]]; then
     log 'Allow TCP 80 and TCP 443 for Caddy.'
   elif [[ "$MODE" == reality ]]; then
@@ -60,7 +60,7 @@ prompt_mode_parameters() {
     REALITY_DEST="${input:-$REALITY_DEST}"
     read -r -p "REALITY SNI [${REALITY_SNI}]: " input || return 1
     REALITY_SNI="${input:-$REALITY_SNI}"
-    log 'Allow TCP 443 for REALITY.'
+    log 'Allow TCP 8443 for REALITY.'
   fi
 }
 

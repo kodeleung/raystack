@@ -11,13 +11,13 @@ def print_client_config(mode: str, values: dict) -> str:
              '# Paste this block into your Mihomo / Clash Meta configuration.', 'proxies:']
     if mode == 'hy2':
         lines += ['  - name: "raystack-hy2"', '    type: hysteria2',
-                  '    server: ' + quote(v['domain']), '    port: 443',
+                  '    server: ' + quote(v['domain']), '    port: 8443',
                   '    password: ' + quote(v['hy2_password']),
                   '    sni: ' + quote(v['domain']), '    skip-cert-verify: false']
     elif mode in ('ws', 'reality'):
         lines += ['  - name: ' + quote('raystack-' + mode), '    type: vless',
                   '    server: ' + quote(v['domain'] if mode == 'ws' else 'YOUR_SERVER_ADDRESS'),
-                  '    port: 443', '    uuid: ' + quote(v['uuid']), '    udp: true', '    tls: true']
+                  '    port: ' + ('8443' if mode == 'reality' else '443'), '    uuid: ' + quote(v['uuid']), '    udp: true', '    tls: true']
         if mode == 'ws':
             lines += ['    servername: ' + quote(v['domain']), '    network: ws',
                       '    ws-opts:', '      path: "/ray"']

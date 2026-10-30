@@ -67,7 +67,7 @@ try:
             import time
             for attempt in range(50):
                 try:
-                    with socket.create_connection(('127.0.0.1', 8443), timeout=2) as raw:
+                    with socket.create_connection(('127.0.0.1', 9443), timeout=2) as raw:
                         with ssl._create_unverified_context().wrap_socket(raw, server_hostname='test.example.com') as tls:
                             tls.sendall(b'GET /subscription/synthetic-token HTTP/1.1\r\nHost: test.example.com\r\nConnection: close\r\n\r\n')
                             response = http.client.HTTPResponse(tls); response.begin()

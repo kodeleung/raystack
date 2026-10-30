@@ -60,6 +60,8 @@ def recognize_xray(root, cfg):
             text = (template_dir / f'xray-{mode}.json').read_text()
             expected = json.loads(text)['inbounds'][0]
             expected['settings']['clients'][0]['id'] = uuid
+            if mode == 'reality' and inbound.get('port') in (443, 8443):
+                expected['port'] = inbound['port']
             if mode == 'reality':
                 r = inbound.get('streamSettings', {}).get('realitySettings', {})
                 er = expected['streamSettings']['realitySettings']
@@ -125,13 +127,13 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
     subscription_caddy = False
     saved_subscription = load_json(root, 'etc/raystack/traffic.json')
     if saved_subscription and saved_subscription.get('enabled', True) and caddy is not None:
-        from subscription_deployment import caddy_config
+        from subscription_deployment import caddy_config, legacy_caddy_config
         node = saved_subscription.get('nodes', {})
         mode = node.get('mode')
         if mode in ('ws', 'reality', 'hy2'):
             base = (Path(__file__).resolve().parent.parent / 'config/Caddyfile').read_text().replace('__DOMAIN__', node.get('domain', '')).replace('__HTTPS_PORT__', '443')
-            expected = caddy_config(mode, saved_subscription.get('subscription_domain', node.get('domain', '')), base)
-            subscription_caddy = re.sub(r'\s+', '', caddy) == re.sub(r'\s+', '', expected)
+            domain = saved_subscription.get('subscription_domain', node.get('domain', ''))
+            subscription_caddy = any(re.sub(r'\s+', '', caddy) == re.sub(r'\s+', '', render(mode, domain, base)) for render in (caddy_config, legacy_caddy_config))
     caddy_known = caddy is not None and (recognize_caddy(caddy, False) or recognize_caddy(caddy, True))
     replacing_unknown_xray = False
     try:
@@ -159,7 +161,7 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
     hy2 = load_json(root, HY2_CONFIG)
     if hy2 is not None:
         password = read(root, 'etc/raystack/hy2-password')
-        if not password or hy2.get('auth') != {'type': 'password', 'password': password} or hy2.get('listen') != ':443':
+        if not password or hy2.get('auth') != {'type': 'password', 'password': password} or hy2.get('listen') not in (':443', ':8443'):
             raise ValueError('Hysteria configuration is not owned by raystack')
         # A raystack generated file has a fixed schema, not arbitrary hooks/outbounds.
         if set(hy2) != {'listen', 'acme', 'auth'} or hy2.get('acme', {}).get('dir') != '/var/lib/hysteria/acme':
@@ -181,7 +183,7 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
 
 def validate_listeners(state: dict, selected_mode: str, sockets: list[dict]) -> None:
     required = {'ws': {('tcp', 80), ('tcp', 443), ('udp', 443), ('tcp', 10000)},
-                'reality': {('tcp', 443)}, 'hy2': {('tcp', 80), ('udp', 443)}}[selected_mode]
+                'reality': {('tcp', 8443)}, 'hy2': {('tcp', 80), ('udp', 8443)}}[selected_mode]
     for item in sockets:
         if (item['transport'], item['port']) in required and item.get('service') not in state['services']:
             raise ValueError(f"Port {item['port']}/{item['transport']} belongs to an unrelated service")

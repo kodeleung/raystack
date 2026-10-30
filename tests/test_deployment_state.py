@@ -129,8 +129,11 @@ class DeploymentStateTests(unittest.TestCase):
 
     def test_listener_ownership(self):
         state = {'services': ['xray.service']}
+        validate_listeners(state, 'reality', [{'transport': 'tcp', 'port': 443, 'service': 'unrelated.service'}])
+        with self.assertRaises(ValueError):
+            validate_listeners(state, 'reality', [{'transport': 'tcp', 'port': 8443, 'service': 'unrelated.service'}])
         validate_listeners(state, 'hy2', [{'transport': 'tcp', 'port': 443, 'service': 'xray.service'}])
-        for transport, port in [('tcp', 80), ('udp', 443)]:
+        for transport, port in [('tcp', 80), ('udp', 8443)]:
             with self.assertRaises(ValueError):
                 validate_listeners(state, 'hy2', [{'transport': transport, 'port': port, 'service': 'unrelated.service'}])
 

@@ -10,7 +10,7 @@ PATHS = ['etc/raystack/traffic.json', 'etc/raystack/vnstat.conf'] + ['etc/system
 ROUTE = '  handle /subscription/* {\n    reverse_proxy 127.0.0.1:8765\n  }\n\n'
 
 
-def caddy_config(mode, domain, base=None):
+def legacy_caddy_config(mode, domain, base=None):
     if mode == 'ws':
         return base.replace('  handle /ray* {', ROUTE + '  handle /ray* {')
     return '''{
@@ -31,6 +31,19 @@ def caddy_config(mode, domain, base=None):
   }
 }
 ''' % (domain, ROUTE) + ('\nhttp://%s {\n  handle /.well-known/acme-challenge/* {\n    reverse_proxy 127.0.0.1:8888\n  }\n}\n' % domain if mode == 'hy2' else '')
+
+
+def caddy_config(mode, domain, base=None):
+    global_options = '{\n  admin off\n  servers {\n    protocols h1 h2\n  }\n}\n'
+    main_site = ''
+    if mode == 'ws':
+        # The WS site keeps standard HTTPS; only subscriptions use TCP 9443.
+        import re
+        main_site = re.sub(r'^\s*\{\s*https_port 443\s*\}\s*', '', base, count=1)
+    tls = '' if mode == 'ws' else '  tls {\n    issuer acme {\n      disable_tlsalpn_challenge\n    }\n  }\n'
+    site = '%s:9443 {\n%s%s  handle {\n    respond "OK"\n  }\n}\n' % (domain, tls, ROUTE)
+    challenge = ('\nhttp://%s {\n  handle /.well-known/acme-challenge/* {\n    reverse_proxy 127.0.0.1:8888\n  }\n}\n' % domain if mode == 'hy2' else '')
+    return global_options + main_site + site + challenge
 
 
 def prepare_dependencies():
@@ -123,7 +136,7 @@ def initialize(config):
 
 
 def url(config):
-    port = '' if config['nodes']['mode'] == 'ws' else ':8443'
+    port = ':9443'
     return 'https://' + config['subscription_domain'] + port + '/subscription/' + config['token']
 
 
@@ -135,7 +148,7 @@ def wait_https(config, timeout=120):
     import time
     deadline = time.monotonic() + timeout
     host = config['subscription_domain']
-    port = 443 if config['nodes']['mode'] == 'ws' else 8443
+    port = 9443
     while time.monotonic() < deadline:
         try:
             with socket.create_connection(('127.0.0.1', port), timeout=3) as raw:

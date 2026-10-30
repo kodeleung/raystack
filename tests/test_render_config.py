@@ -19,7 +19,7 @@ class RenderTests(unittest.TestCase):
         files = render_configs('hy2', values())
         self.assertEqual(list(files), ['etc/hysteria/config.yaml'])
         cfg = json.loads(files['etc/hysteria/config.yaml'])
-        self.assertEqual(cfg['listen'], ':443')
+        self.assertEqual(cfg['listen'], ':8443')
         self.assertEqual(cfg['acme']['ca'], 'letsencrypt')
         self.assertEqual(cfg['acme']['type'], 'http')
         self.assertEqual(cfg['acme']['dir'], '/var/lib/hysteria/acme')

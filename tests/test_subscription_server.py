@@ -25,7 +25,7 @@ class ServerTests(unittest.TestCase):
             res, body = self.request('GET', '/subscription/secret')
             self.assertEqual(res.status, 200)
             self.assertEqual(res.getheader('subscription-userinfo'), 'upload=0; download=20; total=100')
-            self.assertIn(b'MATCH,Proxy', body)
+            self.assertIn(b'MATCH,FINAL', body)
             res, body = self.request('HEAD', '/subscription/secret')
             self.assertEqual((res.status, body), (200, b''))
         res, _ = self.request('GET', '/subscription/wrong')

@@ -113,6 +113,15 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual(path.read_text(), '{"legacy": true}')
         self.assertTrue(self.services.state('xray.service')['active'])
 
+    def test_legacy_hy2_port_is_upgraded(self):
+        self.install('hy2')
+        path = self.root / 'etc/hysteria/config.yaml'
+        cfg = json.loads(path.read_text())
+        cfg['listen'] = ':443'
+        path.write_text(json.dumps(cfg))
+        self.install('hy2')
+        self.assertEqual(json.loads(path.read_text())['listen'], ':8443')
+
     def test_prepare_failure_does_not_stop_old_service(self):
         self.install('ws')
         self.services.events.clear()

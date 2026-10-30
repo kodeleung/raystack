@@ -39,8 +39,8 @@ used by WS. Required public inbound access:
 | Mode | Ports |
 | --- | --- |
 | WS + TLS | TCP 80 and TCP 443 |
-| REALITY | TCP 443 |
-| HY2 | UDP 443 and TCP 80 |
+| REALITY | TCP 8443 |
+| HY2 | UDP 8443 and TCP 80 |
 
 For HY2, TCP 80 must remain available for certificate renewal. Open these ports
 both on the server firewall and in your provider's security group. The installer
@@ -165,15 +165,18 @@ Clash Party. It contains credentials; keep it secret. Refresh the subscription
 to refresh usage; the suggested refresh interval is one hour. Fresh statistics
 may take about a minute to become available; retry import after initialization.
 
-- WS subscription: `https://your-domain/subscription/<token>` (TCP 443).
-- REALITY and HY2 subscription: `https://your-domain:8443/subscription/<token>`.
+- All subscription modes: `https://your-domain:9443/subscription/<token>` (TCP 9443).
+- REALITY data uses TCP 8443; WS data uses TCP 443; HY2 data uses UDP 8443.
+- Caddy keeps its standard HTTPS default; the subscription site explicitly uses 9443.
+- When upgrading older installs, open the new ports first, reinstall, then replace the saved
+  client subscription URL with the newly printed 9443 URL. Older REALITY data used 443 and subscriptions used 443/8443.
 - Enable inbound TCP 80 for automatic certificates, plus the subscription port.
   DNS must point directly to this server with no broken AAAA record.
 - Enabling subscriptions uses a raystack-managed Caddy service in every mode.
   It refuses to take over unrelated services or occupied subscription ports.
   With subscriptions disabled, REALITY/HY2 do not require a Caddy configuration.
 - HY2 HTTP-01 validation is forwarded by Caddy to its local ACME listener on
-  port 8888, including certificate renewal. UDP 443 remains the HY2 data port.
+  port 8888, including certificate renewal. UDP 8443 remains the HY2 data port.
 
 The new cycle starts at midnight in the selected billing timezone without
 changing the VPS system timezone or deleting statistics. Missing days 29–31

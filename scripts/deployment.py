@@ -123,8 +123,8 @@ class SystemServices:
 
     def wait(self, mode):
         required = {'ws': {('tcp', 443, 'caddy.service'), ('tcp', 10000, 'xray.service')},
-                    'reality': {('tcp', 443, 'xray.service')},
-                    'hy2': {('udp', 443, 'hysteria-server.service')}}[mode]
+                    'reality': {('tcp', 8443, 'xray.service')},
+                    'hy2': {('udp', 8443, 'hysteria-server.service')}}[mode]
         deadline = time.monotonic() + (120 if mode == 'hy2' else 30)
         while time.monotonic() < deadline:
             for service in SERVICES[mode]:
@@ -291,7 +291,7 @@ WantedBy=multi-user.target
                 raise ValueError('Subscription HTTPS requires Caddy; existing unrelated Caddy configuration will not be replaced')
             sockets = self.services.sockets(affected)
             for sock in sockets:
-                if sock['transport'] == 'tcp' and sock['port'] in (80, 8443, 8765):
+                if sock['transport'] == 'tcp' and sock['port'] in (80, 9443, 8765):
                     allowed = set(state['services']) | (set(SUB_SERVICES) if old_subscription else set())
                     if sock.get('service') not in allowed:
                         raise ValueError(f"Subscription port {sock['port']}/tcp is occupied by an unrelated service")
@@ -377,7 +377,7 @@ WantedBy=multi-user.target
         if subscription_config:
             from subscription_deployment import url
             print('[raystack] Subscription URL: ' + url(subscription_config), flush=True)
-            print('[raystack] Usage may need a minute to initialize. Allow TCP 80 and ' + ('443' if mode == 'ws' else '8443') + ' for HTTPS subscriptions.', flush=True)
+            print('[raystack] Usage may need a minute to initialize. Allow TCP 80 and 9443 for HTTPS subscriptions.', flush=True)
         return values
 
 
@@ -397,7 +397,7 @@ if __name__ == '__main__':
         from print_client_config import print_client_config
         print('[raystack] Installation complete; selected service is running and listening.')
         if args.mode == 'hy2':
-            print('[raystack] Required firewall access: UDP 443 and TCP 80 (ACME renewal).')
+            print('[raystack] Required firewall access: UDP 8443 and TCP 80 (ACME renewal).')
         print('[raystack] Public client reachability has not been tested.')
         print(print_client_config(args.mode, result))
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError, KeyboardInterrupt) as exc:
