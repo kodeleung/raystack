@@ -1,130 +1,161 @@
 # raystack
 
-`raystack` is a simple bash-based CLI project for deploying a VPS proxy stack with:
+An interactive Linux installer for **one proxy mode at a time**:
 
-- Xray (`VLESS + WebSocket + TLS` and `VLESS + TCP + REALITY`)
-- Caddy (automatic HTTPS, when WebSocket mode is selected)
-- systemd service management
+1. **VLESS + WebSocket + TLS** — Xray behind Caddy, with automatic HTTPS.
+2. **VLESS + TCP + REALITY** — Xray with Vision, without a domain or certificate requirement.
+3. **Hysteria 2** — QUIC over UDP, with its own automatic certificate management.
 
-## Features
-
-- Bash only
-- Simple project structure
-- Idempotent install flow
-- Interactive mode selection
-- Generate or reuse UUID and REALITY credentials
-- Generate mode-specific Xray and Caddy config files
-- Enable and start services with `systemd`
-
-## Project Structure
-
-```text
-raystack/
-├── install.sh
-├── config/
-│   ├── xray-ws.json
-│   ├── xray-reality.json
-│   ├── xray-both.json
-│   └── Caddyfile
-└── scripts/
-    ├── install_xray.sh
-    ├── install_caddy.sh
-    └── generate_config.sh
-```
+The entry point is Bash. Python 3 handles configuration serialization, installation
+recognition, backups, and service changes using only its standard library.
 
 ## Requirements
 
-- A Linux VPS with `systemd`
-- Root access or `sudo`
-- A domain name already pointed to the VPS
+- Linux with systemd, root access (or sudo), and an amd64 or arm64 CPU.
+- `python3`, `curl`, `openssl`, `systemctl`, `ss`, `flock`, and `useradd`.
+- Outbound HTTPS access to GitHub releases and its API. Official release downloads
+  are checked against the SHA-256 digest published in GitHub release metadata.
+- For WS/HY2: a domain pointed directly at the server. Use Cloudflare **DNS only**
+  (grey cloud). Publish an AAAA record only if server IPv6 works.
+- For HY2: an email for ACME certificate management.
 
-## Usage
-
-Run the installer:
+On a minimal Debian/Ubuntu installation, install missing prerequisites with:
 
 ```bash
-./install.sh
+sudo apt-get update
+sudo apt-get install -y python3 curl openssl ca-certificates iproute2 util-linux passwd
 ```
 
-Choose one of the prompts:
+## Install
 
-1. `VLESS + WebSocket + TLS` — enter the domain to use.
-2. `VLESS + TCP + REALITY` — confirm or override the displayed REALITY destination and SNI.
-3. Both modes — enter a WebSocket domain and confirm or override the REALITY defaults.
+```bash
+sudo bash ./install.sh
+```
 
-## What The Installer Does
+Choose exactly one mode. HY2 prompts for your domain and email, generates a random
+password, and obtains/renews a Let's Encrypt certificate itself; Caddy is only
+used by WS. Required public inbound access:
 
-1. Installs system dependencies
-2. Installs Xray
-3. Installs Caddy only when WebSocket mode is selected
-4. Generates or reuses a UUID and, for REALITY, key material and a short ID
-5. Writes the selected Xray configuration and, when needed, a Caddy config
-6. Validates the generated configurations
-7. Enables and starts the applicable services
-8. Prints Mihomo / Clash Meta proxy YAML for the selected mode or modes
+| Mode | Ports |
+| --- | --- |
+| WS + TLS | TCP 80 and TCP 443 |
+| REALITY | TCP 443 |
+| HY2 | UDP 443 and TCP 80 |
 
-## Generated Runtime Files
+For HY2, TCP 80 must remain available for certificate renewal. Open these ports
+both on the server firewall and in your provider's security group. The installer
+checks local conflicts but does not change either firewall.
 
-The installer writes files to these system paths:
+## Reinstall and switch modes
 
-- `/usr/local/etc/xray/config.json`
-- `/etc/caddy/Caddyfile`
-- `/etc/systemd/system/xray.service`
-- `/etc/raystack/uuid`
-- `/etc/raystack/reality-private-key` (REALITY only)
-- `/etc/raystack/reality-public-key` (REALITY only)
-- `/etc/raystack/reality-short-id` (REALITY only)
+Reinstalling the same mode reuses its saved UUID, REALITY keys, or HY2 password.
+Selecting a different mode **automatically removes the old raystack mode and
+installs the new one**, without an additional confirmation. This briefly
+interrupts existing connections. Previous combined WS + REALITY installations
+are recognized and can be replaced with one selected mode.
 
-## Default Configuration
+Before switching, raystack checks ownership and ports, prepares the new runtime,
+and validates staged configuration. It saves the old configurations, service
+units/drop-ins, and service enabled/running states under:
 
-### VLESS + WebSocket + TLS
+```text
+/etc/raystack/backups/<UTC timestamp>-<random suffix>/snapshot.json
+```
 
-- Protocol: `VLESS`
-- Transport: `WebSocket`
-- Path: `/ray`
-- Local listen address: `127.0.0.1`
-- Local port: `10000`
-- Public port: `443`, or `8443` when both modes are installed
+Backups are root-only and contain secrets. If activation fails or times out,
+raystack attempts to restore the old files and service states. A rollback failure
+is reported with the backup location. Keep backups private; they are not
+compressed archives and should not be shared.
 
-### VLESS + TCP + REALITY
+Only recognized raystack deployments are automatically replaced. Custom Xray
+inbounds, unrelated Caddy sites, unknown service overrides, inconsistent mode
+markers, and unrelated processes occupying required ports cause a diagnostic
+instead of being overwritten. If an earlier run was forcibly killed, resolve
+any reported inconsistent state before retrying. There is no standalone
+uninstaller in this version.
 
-- Protocol: `VLESS`
-- Transport: `TCP`
-- Flow: `xtls-rprx-vision`
-- Public port: `443`
-- Default destination and SNI: `swscan.apple.com:443` and `swscan.apple.com`
-- The installer prints the required public key and short ID after installation.
+Old services are stopped and disabled and their recognized active configuration
+and local units are removed. Shared packages/binaries, credentials, Caddy
+certificate storage, and HY2 ACME state are retained; they do not create another
+active proxy mode. The installer does not purge unrelated packages or sites.
 
-### Caddy (WebSocket mode)
+A successful installation means the selected service is running and owns the
+expected listening socket. It does not prove that a provider firewall permits
+public traffic. Real ACME issuance depends on DNS and inbound reachability.
 
-- Automatic HTTPS for your domain
-- Reverse proxy for `/ray*` to `127.0.0.1:10000`
-- Default response for other requests: `OK`
+## Clash / Mihomo configuration
 
-## Notes
+The installer prints one `MIHOMO / CLASH META PROXIES` block. Copy its `proxies:`
+section into your client configuration. REALITY includes
+`support-x25519mlkem768: true`; replace `YOUR_SERVER_ADDRESS` with the VPS address.
+HY2 uses the supplied domain as its server/SNI and keeps certificate verification
+on (`skip-cert-verify: false`). No optional HY2 obfuscation, port hopping, or
+bandwidth tuning is enabled.
 
-- The install flow is designed to be safe to run more than once.
-- Existing UUID is reused from `/etc/raystack/uuid`.
-- Existing REALITY keys and short ID are reused from `/etc/raystack`.
-- Caddy handles TLS automatically after DNS is set correctly. In combined mode,
-  it listens on `8443` because REALITY owns `443`.
-- After a successful install, copy the displayed `MIHOMO / CLASH META PROXIES`
-  block into a Mihomo / Clash Meta configuration. For a REALITY node, replace
-  `YOUR_SERVER_ADDRESS` with the VPS IP address or domain before importing.
+## Runtime files and defaults
 
-## Traffic subscription (experimental)
+| Purpose | Path / value |
+| --- | --- |
+| Successful selected mode | `/etc/raystack/mode` |
+| UUID | `/etc/raystack/uuid` |
+| REALITY keys / short ID | `/etc/raystack/reality-{private-key,public-key,short-id}` |
+| HY2 password (0600) | `/etc/raystack/hy2-password` |
+| Xray configuration | `/usr/local/etc/xray/config.json` |
+| Caddy configuration | `/etc/caddy/Caddyfile` |
+| HY2 configuration (JSON, valid YAML) | `/etc/hysteria/config.yaml` |
+| HY2 certificate/ACME state | `/var/lib/hysteria/acme` |
+| WS internal listener/path | `127.0.0.1:10000`, `/ray` |
+| REALITY destination / SNI | `swscan.apple.com:443` / `swscan.apple.com` |
 
-The interactive installer can set a monthly quota in decimal GB (1 GB =
-1,000,000,000 bytes), reset day, billing timezone, network interface, and
-outbound-only or bidirectional accounting. The cycle changes at midnight in
-the chosen timezone; days 29–31 are clamped to the last day of shorter months.
-The installer prints a private HTTPS subscription URL for Clash Party. Update the
-subscription to refresh its displayed usage; keep the URL secret.
+Selected services: `xray.service` for REALITY, `xray.service` and `caddy.service`
+for WS, or `hysteria-server.service` for HY2. To inspect HY2 failures:
 
-The count covers all traffic on the chosen VPS interface, not individual proxy
-clients. Outbound-only reports VPS transmit bytes as download and zero upload;
-bidirectional reports receive as upload and transmit as download. Statistics
-start when installed and can lag vnStat's save interval; they do not reconstruct
-prior usage. Provider billing may differ. Exhausting the quota does not block
-traffic. REALITY subscription hosting needs a domain and TCP ports 80 and 8443;
-other modes use the existing HTTPS port and port 80 for certificate issuance.
+```bash
+systemctl status hysteria-server.service
+journalctl -u hysteria-server.service -n 80 --no-pager
+```
+
+HY2 configuration has JSON syntax so no YAML parsing package is needed. Xray
+outbounds continue to use `ForceIPv4`; HY2 uses its default address selection.
+The installer does not change system DNS.
+
+## Development
+
+- `install.sh`: interactive selection and input; credentials flow through stdin.
+- `scripts/installer_input.py`: validation and credential generation/reuse.
+- `scripts/render_config.py`: staged configuration generation.
+- `scripts/deployment_state.py`: legacy and current installation recognition.
+- `scripts/runtime_install.py`: official binary preparation without starting services.
+- `scripts/deployment.py`: locking, backups, mode replacement, readiness, rollback.
+- `scripts/print_client_config.py`: one client proxy per selected mode.
+- `config/`: single-mode templates only.
+
+`generate_config.sh --mode <ws|reality|hy2> --output-dir DIR` now renders staged
+files from JSON on stdin. It no longer writes live `/etc` configurations directly;
+use the interactive installer for activation and rollback protection.
+
+Run safe local tests (temporary roots and fake services; no host service changes):
+
+```bash
+bash tests/run.sh
+```
+
+Opt in to a real HY2 server/client smoke test in a disposable Linux container:
+
+```bash
+RAYSTACK_RUNTIME_TEST=1 bash tests/test_hy2_runtime.sh
+```
+
+The container publishes no host ports, mounts this repository read-only, and
+checks trusted test-certificate traffic and wrong-password rejection. It does
+not test public ACME issuance, cloud firewalls, or production domain connectivity.
+
+## Experimental traffic subscription
+
+The earlier traffic subscription prototype is retained in `scripts/traffic.py`,
+`scripts/client_config.py`, `scripts/subscription_server.py`, and
+`scripts/install_traffic.sh`. It is not integrated with the exclusive-mode
+installer and should not be deployed. The prototype needs integration with mode
+switching and rollback, HY2 support, and Linux runtime validation before use.
+Existing installations using its modified Caddy configuration may be rejected by
+the installer's ownership checks; inspect the deployment before changing modes.
