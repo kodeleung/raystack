@@ -39,6 +39,24 @@ class SubscriptionDeploymentTests(unittest.TestCase):
             if mode == 'hy2':
                 cfg = json.loads((self.root / 'etc/hysteria/config.yaml').read_text())
                 self.assertEqual(cfg['acme']['http']['altPort'], 8888)
+    def test_enabled_caddy_with_legacy_explicit_port_is_adopted(self):
+        xray = self.root / 'usr/local/etc/xray/config.json'
+        xray.parent.mkdir(parents=True)
+        xray.write_text('{"legacy": true}')
+        caddy = self.root / 'etc/caddy/Caddyfile'
+        caddy.parent.mkdir(parents=True)
+        old = '# Package header\ndmit.shanbo.site:8443 {\n handle /ray* { reverse_proxy 127.0.0.1:10000 }\n handle { respond "OK" }\n}\n'
+        caddy.write_text(old)
+        self.services.states['caddy.service'] = {'enabled': 'enabled', 'active': True}
+        self.services.states['xray.service'] = {'enabled': 'enabled', 'active': True}
+        _, output = self.install('reality')
+        self.assertIn('Subscription URL:', output)
+        self.assertTrue(self.services.state('caddy.service')['active'])
+        snapshot = next((self.root / 'etc/raystack/backups').glob('*/snapshot.json'))
+        import base64
+        record = json.loads(snapshot.read_text())['files']['etc/caddy/Caddyfile']
+        self.assertEqual(base64.b64decode(record['data']).decode(), old)
+
     def test_failure_restores_previous_profile_and_services(self):
         self.install('reality')
         previous = (self.root / 'etc/raystack/traffic.json').read_bytes()

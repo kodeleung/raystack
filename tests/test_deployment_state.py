@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from deployment_state import inspect_installation, validate_listeners
+from deployment_state import inspect_installation, validate_listeners, recognize_caddy
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -114,6 +114,18 @@ class DeploymentStateTests(unittest.TestCase):
         self.install_xray('both')
         self.write('usr/local/etc/xray/config.json', '{"legacy": true}')
         self.assertEqual(inspect_installation(self.root, replace_xray=True)['modes'], ['ws', 'reality'])
+
+    def test_legacy_explicit_port_caddy(self):
+        text = '# Caddy package comment\ndmit.shanbo.site:8443 {\n    handle /ray* {\n        reverse_proxy 127.0.0.1:10000\n    }\n    handle {\n        respond "OK"\n    }\n}\n# Documentation footer\n'
+        self.assertTrue(recognize_caddy(text, True))
+        self.assertFalse(recognize_caddy(text, False))
+        self.assertFalse(recognize_caddy(text + 'other.example { respond "hello" }', True))
+        self.assertFalse(recognize_caddy(text.replace('127.0.0.1:10000', '127.0.0.1:9000'), True))
+        self.install_xray('reality')
+        self.write('etc/caddy/Caddyfile', text)
+        state = inspect_installation(self.root, replace_xray=True, selected_mode='reality')
+        self.assertIn('caddy.service', state['services'])
+        self.assertIn('etc/caddy/Caddyfile', state['managed_paths'])
 
     def test_listener_ownership(self):
         state = {'services': ['xray.service']}

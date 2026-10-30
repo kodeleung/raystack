@@ -87,6 +87,15 @@ def recognize_xray(root, cfg):
 
 
 def recognize_caddy(text, combined):
+    # Older installers used a site address with an explicit port and retained
+    # the distribution's comment header instead of a global https_port block.
+    text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('#'))
+    legacy = re.fullmatch(r'\s*([a-zA-Z0-9.-]+):(443|8443)\s*\{(.*)\}\s*', text, re.S)
+    if legacy:
+        expected_port = '8443' if combined else '443'
+        body = re.sub(r'\s+', '', legacy[3])
+        allowed = 'handle/ray*{reverse_proxy127.0.0.1:10000}handle{respond"OK"}'
+        return legacy[2] == expected_port and body in (allowed, 'encodezstdgzip' + allowed)
     match = re.search(r'\}\s*([a-zA-Z0-9.-]+)\s*\{', text)
     if not match:
         return False
@@ -137,9 +146,11 @@ def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> 
             modes = ['ws', 'reality'] if recognize_caddy(caddy, True) else ['ws']
         else:
             modes = ['reality']
+    if caddy_known and not modes and replace_xray:
+        modes = ['ws']
+        replacing_unknown_xray = True
     if caddy is not None:
-        if not (subscription_caddy or ('ws' in modes and recognize_caddy(caddy, 'reality' in modes)) or
-                ('reality' in modes and recognize_caddy(caddy, True))):
+        if not (subscription_caddy or caddy_known):
             if selected_mode not in ('reality', 'hy2') or 'ws' in modes:
                 raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
             caddy = None
