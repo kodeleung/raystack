@@ -111,3 +111,20 @@ The installer writes files to these system paths:
 - After a successful install, copy the displayed `MIHOMO / CLASH META PROXIES`
   block into a Mihomo / Clash Meta configuration. For a REALITY node, replace
   `YOUR_SERVER_ADDRESS` with the VPS IP address or domain before importing.
+
+## Traffic subscription (experimental)
+
+The interactive installer can set a monthly quota in decimal GB (1 GB =
+1,000,000,000 bytes), reset day, billing timezone, network interface, and
+outbound-only or bidirectional accounting. The cycle changes at midnight in
+the chosen timezone; days 29–31 are clamped to the last day of shorter months.
+The installer prints a private HTTPS subscription URL for Clash Party. Update the
+subscription to refresh its displayed usage; keep the URL secret.
+
+The count covers all traffic on the chosen VPS interface, not individual proxy
+clients. Outbound-only reports VPS transmit bytes as download and zero upload;
+bidirectional reports receive as upload and transmit as download. Statistics
+start when installed and can lag vnStat's save interval; they do not reconstruct
+prior usage. Provider billing may differ. Exhausting the quota does not block
+traffic. REALITY subscription hosting needs a domain and TCP ports 80 and 8443;
+other modes use the existing HTTPS port and port 80 for certificate issuance.
