@@ -86,9 +86,10 @@ main() {
   done
   prompt_mode
   prompt_mode_parameters
-  # Credentials travel through a pipe, never logged command-line arguments.
-  python3 "${SCRIPTS_DIR}/installer_input.py" "$MODE" "$DOMAIN" "$EMAIL" "$REALITY_DEST" "$REALITY_SNI" |
-    python3 "${SCRIPTS_DIR}/deployment.py" --mode "$MODE"
+  # Do not start deployment when input preparation fails. Credentials stay in memory.
+  local prepared
+  prepared="$(python3 "${SCRIPTS_DIR}/installer_input.py" "$MODE" "$DOMAIN" "$EMAIL" "$REALITY_DEST" "$REALITY_SNI")" || return 1
+  printf '%s\n' "$prepared" | python3 "${SCRIPTS_DIR}/deployment.py" --mode "$MODE"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

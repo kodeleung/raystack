@@ -255,7 +255,7 @@ WantedBy=multi-user.target
             return self._install(mode, values, prepare)
 
     def _install(self, mode, values, prepare):
-        state = inspect_installation(self.root)
+        state = inspect_installation(self.root, replace_xray=True)
         affected = list(dict.fromkeys(state['services'] + SERVICES[mode]))
         previous_states = {s: self.services.state(s) for s in affected}
         for service in affected:

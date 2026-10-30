@@ -100,11 +100,24 @@ def validate_unit(root, service):
     validate_service(root, service, safe_path)
 
 
-def inspect_installation(root: Path) -> dict:
+def inspect_installation(root: Path, replace_xray=False) -> dict:
     root = root.absolute()
-    cfg = load_json(root, XRAY_CONFIG)
-    modes = recognize_xray(root, cfg) if cfg is not None else []
     caddy = read(root, CADDY_CONFIG)
+    replacing_unknown_xray = False
+    try:
+        cfg = load_json(root, XRAY_CONFIG)
+        modes = recognize_xray(root, cfg) if cfg is not None else []
+    except ValueError:
+        if not replace_xray or not safe_path(root, XRAY_CONFIG).is_file():
+            raise
+        replacing_unknown_xray = True
+        # Only explicitly replace the Xray config; do not adopt arbitrary Caddy sites.
+        if caddy is not None:
+            if not (recognize_caddy(caddy, False) or recognize_caddy(caddy, True)):
+                raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
+            modes = ['ws']
+        else:
+            modes = ['reality']
     if caddy is not None:
         if 'ws' not in modes or not recognize_caddy(caddy, 'reality' in modes):
             raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
@@ -120,7 +133,7 @@ def inspect_installation(root: Path) -> dict:
             raise ValueError('Hysteria configuration contains unmanaged settings')
         modes.append('hy2')
     marker = read(root, MODE_PATH)
-    if marker is not None and (marker not in modes or len(modes) != 1):
+    if marker is not None and (marker not in modes or len(modes) != 1) and not replacing_unknown_xray:
         raise ValueError('Mode marker disagrees with configurations; inspect interrupted installation')
     services = list(dict.fromkeys(s for m in modes for s in SERVICES[m]))
     for service in services:

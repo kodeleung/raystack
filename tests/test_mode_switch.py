@@ -74,6 +74,41 @@ class SwitchTests(unittest.TestCase):
                             self.assertEqual(self.services.state(service)['active'], expected)
                             self.assertEqual(self.services.state(service)['enabled'] == 'enabled', expected)
 
+    def test_unknown_xray_replaced_and_backed_up(self):
+        path = self.root / 'usr/local/etc/xray/config.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{"legacy": true}')
+        self.services.states['xray.service'] = {'enabled': 'enabled', 'active': True}
+        self.install('reality')
+        self.assertEqual(inspect_installation(self.root)['modes'], ['reality'])
+        snapshots = list((self.root / 'etc/raystack/backups').glob('*/snapshot.json'))
+        snapshot = json.loads(snapshots[0].read_text())
+        import base64
+        self.assertEqual(base64.b64decode(snapshot['files']['usr/local/etc/xray/config.json']['data']), b'{"legacy": true}')
+
+    def test_unknown_xray_does_not_replace_unmanaged_caddy(self):
+        path = self.root / 'usr/local/etc/xray/config.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{"legacy": true}')
+        caddy = self.root / 'etc/caddy/Caddyfile'
+        caddy.parent.mkdir(parents=True)
+        caddy.write_text('unrelated.example { respond "hello" }')
+        with self.assertRaisesRegex(ValueError, 'unmanaged'):
+            self.install('reality')
+        self.assertEqual(path.read_text(), '{"legacy": true}')
+        self.assertEqual(caddy.read_text(), 'unrelated.example { respond "hello" }')
+
+    def test_unknown_xray_restored_when_install_fails(self):
+        path = self.root / 'usr/local/etc/xray/config.json'
+        path.parent.mkdir(parents=True)
+        path.write_text('{"legacy": true}')
+        self.services.states['xray.service'] = {'enabled': 'enabled', 'active': True}
+        self.services.wait_failure = True
+        with self.assertRaises(RuntimeError):
+            self.install('reality')
+        self.assertEqual(path.read_text(), '{"legacy": true}')
+        self.assertTrue(self.services.state('xray.service')['active'])
+
     def test_prepare_failure_does_not_stop_old_service(self):
         self.install('ws')
         self.services.events.clear()

@@ -17,7 +17,7 @@ def encode(data):
 
 def collect_values(mode, domain, email, reality_dest='swscan.apple.com:443', reality_sni='swscan.apple.com', root=Path('/')):
     # Reject unmanaged deployments before even preparing new credentials.
-    inspect_installation(root)
+    inspect_installation(root, replace_xray=True)
     if mode in ('ws', 'hy2'):
         domain = hostname(domain)
     if mode == 'hy2':
