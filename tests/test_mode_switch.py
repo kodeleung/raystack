@@ -86,17 +86,21 @@ class SwitchTests(unittest.TestCase):
         import base64
         self.assertEqual(base64.b64decode(snapshot['files']['usr/local/etc/xray/config.json']['data']), b'{"legacy": true}')
 
-    def test_unknown_xray_does_not_replace_unmanaged_caddy(self):
+    def test_unmanaged_caddy_is_preserved_for_reality_and_hy2(self):
         path = self.root / 'usr/local/etc/xray/config.json'
         path.parent.mkdir(parents=True)
         path.write_text('{"legacy": true}')
         caddy = self.root / 'etc/caddy/Caddyfile'
         caddy.parent.mkdir(parents=True)
         caddy.write_text('unrelated.example { respond "hello" }')
-        with self.assertRaisesRegex(ValueError, 'unmanaged'):
-            self.install('reality')
-        self.assertEqual(path.read_text(), '{"legacy": true}')
+        self.services.states['caddy.service'] = {'enabled': 'enabled', 'active': True}
+        self.install('reality')
         self.assertEqual(caddy.read_text(), 'unrelated.example { respond "hello" }')
+        self.assertTrue(self.services.state('caddy.service')['active'])
+        self.assertNotIn(('stop', 'caddy.service'), self.services.events)
+        self.install('hy2')
+        self.assertEqual(caddy.read_text(), 'unrelated.example { respond "hello" }')
+        self.assertTrue(self.services.state('caddy.service')['active'])
 
     def test_unknown_xray_restored_when_install_fails(self):
         path = self.root / 'usr/local/etc/xray/config.json'

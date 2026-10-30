@@ -46,11 +46,11 @@ def atomic_write(path, data, mode=0o600, gid=None):
         Path(temp).unlink(missing_ok=True)
 
 
-def snapshot_installation(root: Path, state: dict, backup_dir: Path, service_states: dict) -> None:
+def snapshot_installation(root: Path, state: dict, backup_dir: Path, service_states: dict, target_mode=None) -> None:
     backup_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
     backup_dir.chmod(0o700)
-    paths = ALL_CONFIGS + [MODE_PATH]
-    for service in ALL_SERVICES:
+    paths = list(dict.fromkeys(state['managed_paths'] + (CONFIGS[target_mode] if target_mode else ALL_CONFIGS) + [MODE_PATH]))
+    for service in (service_states if target_mode else ALL_SERVICES):
         paths.append('etc/systemd/system/' + service)
         directory = safe_path(root, 'etc/systemd/system/' + service + '.d')
         if directory.exists():
@@ -255,7 +255,7 @@ WantedBy=multi-user.target
             return self._install(mode, values, prepare)
 
     def _install(self, mode, values, prepare):
-        state = inspect_installation(self.root, replace_xray=True)
+        state = inspect_installation(self.root, replace_xray=True, selected_mode=mode)
         affected = list(dict.fromkeys(state['services'] + SERVICES[mode]))
         previous_states = {s: self.services.state(s) for s in affected}
         for service in affected:
@@ -279,7 +279,7 @@ WantedBy=multi-user.target
             backup_root.mkdir(parents=True, exist_ok=True, mode=0o700)
             backup_root.chmod(0o700)
             backup = backup_root / (datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S') + '-' + os.urandom(4).hex())
-            snapshot_installation(self.root, state, backup, previous_states)
+            snapshot_installation(self.root, state, backup, previous_states, mode)
             print(f'[raystack] Backup: {backup}', flush=True)
             self.write_credentials(values, pairs)
             print('[raystack] Applying selected mode; existing connections may briefly disconnect.', flush=True)

@@ -97,6 +97,24 @@ class DeploymentStateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             inspect_installation(self.root)
 
+    def test_experimental_subscription_caddy_is_recognized(self):
+        for mode in ('ws', 'both'):
+            with self.subTest(mode=mode):
+                self.install_xray(mode)
+                p = self.root / 'etc/caddy/Caddyfile'
+                p.write_text(p.read_text().replace('  handle /ray* {', '  handle /subscription/* {\n    reverse_proxy 127.0.0.1:8765\n  }\n\n  handle /ray* {'))
+                self.assertIn('caddy.service', inspect_installation(self.root)['services'])
+        self.install_xray('reality')
+        self.write('etc/caddy/Caddyfile', '{\n  https_port 8443\n}\ntest.example {\n  handle /subscription/* {\n    reverse_proxy 127.0.0.1:8765\n  }\n  handle {\n    respond "OK"\n  }\n}\n')
+        state = inspect_installation(self.root)
+        self.assertIn('caddy.service', state['services'])
+        self.assertIn('etc/caddy/Caddyfile', state['managed_paths'])
+
+    def test_unknown_xray_with_combined_caddy(self):
+        self.install_xray('both')
+        self.write('usr/local/etc/xray/config.json', '{"legacy": true}')
+        self.assertEqual(inspect_installation(self.root, replace_xray=True)['modes'], ['ws', 'reality'])
+
     def test_listener_ownership(self):
         state = {'services': ['xray.service']}
         validate_listeners(state, 'hy2', [{'transport': 'tcp', 'port': 443, 'service': 'xray.service'}])

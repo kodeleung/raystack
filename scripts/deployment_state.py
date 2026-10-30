@@ -92,7 +92,12 @@ def recognize_caddy(text, combined):
         return False
     template = (Path(__file__).resolve().parent.parent / 'config/Caddyfile').read_text()
     expected = template.replace('__DOMAIN__', match[1]).replace('__HTTPS_PORT__', '8443' if combined else '443')
-    return re.sub(r'\s+', '', text) == re.sub(r'\s+', '', expected)
+    subscription = '  handle /subscription/* {\n    reverse_proxy 127.0.0.1:8765\n  }\n\n'
+    variants = [expected, expected.replace('  handle /ray* {', subscription + '  handle /ray* {')]
+    if combined:
+        variants.append('{\n  https_port 8443\n}\n%s {\n  handle /subscription/* {\n    reverse_proxy 127.0.0.1:8765\n  }\n  handle {\n    respond "OK"\n  }\n}\n' % match[1])
+    normalized = re.sub(r'\s+', '', text)
+    return any(normalized == re.sub(r'\s+', '', candidate) for candidate in variants)
 
 
 def validate_unit(root, service):
@@ -100,9 +105,15 @@ def validate_unit(root, service):
     validate_service(root, service, safe_path)
 
 
-def inspect_installation(root: Path, replace_xray=False) -> dict:
+def inspect_installation(root: Path, replace_xray=False, selected_mode=None) -> dict:
     root = root.absolute()
-    caddy = read(root, CADDY_CONFIG)
+    try:
+        caddy = read(root, CADDY_CONFIG)
+    except (ValueError, OSError):
+        if selected_mode not in ('reality', 'hy2'):
+            raise
+        caddy = None
+    caddy_known = caddy is not None and (recognize_caddy(caddy, False) or recognize_caddy(caddy, True))
     replacing_unknown_xray = False
     try:
         cfg = load_json(root, XRAY_CONFIG)
@@ -112,15 +123,16 @@ def inspect_installation(root: Path, replace_xray=False) -> dict:
             raise
         replacing_unknown_xray = True
         # Only explicitly replace the Xray config; do not adopt arbitrary Caddy sites.
-        if caddy is not None:
-            if not (recognize_caddy(caddy, False) or recognize_caddy(caddy, True)):
-                raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
-            modes = ['ws']
+        if caddy_known:
+            modes = ['ws', 'reality'] if recognize_caddy(caddy, True) else ['ws']
         else:
             modes = ['reality']
     if caddy is not None:
-        if 'ws' not in modes or not recognize_caddy(caddy, 'reality' in modes):
-            raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
+        if not (('ws' in modes and recognize_caddy(caddy, 'reality' in modes)) or
+                ('reality' in modes and recognize_caddy(caddy, True))):
+            if selected_mode not in ('reality', 'hy2') or 'ws' in modes:
+                raise ValueError('Caddy configuration contains unmanaged sites; refusing to replace it')
+            caddy = None
     elif 'ws' in modes:
         raise ValueError('Incomplete WS installation: missing Caddy configuration')
     hy2 = load_json(root, HY2_CONFIG)
@@ -136,9 +148,13 @@ def inspect_installation(root: Path, replace_xray=False) -> dict:
     if marker is not None and (marker not in modes or len(modes) != 1) and not replacing_unknown_xray:
         raise ValueError('Mode marker disagrees with configurations; inspect interrupted installation')
     services = list(dict.fromkeys(s for m in modes for s in SERVICES[m]))
+    if caddy is not None and 'caddy.service' not in services:
+        services.append('caddy.service')
     for service in services:
         validate_unit(root, service)
     paths = list(dict.fromkeys(p for m in modes for p in CONFIGS[m]))
+    if caddy is not None and CADDY_CONFIG not in paths:
+        paths.append(CADDY_CONFIG)
     return {'modes': modes, 'services': services, 'managed_paths': paths, 'marker': marker}
 
 
