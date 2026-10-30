@@ -267,7 +267,8 @@ WantedBy=multi-user.target
             if service not in SUB_SERVICES:
                 validate_unit(self.root, service)
             if service in SUB_SERVICES:
-                for prefix in ('etc/systemd/system', 'run/systemd/system', 'usr/lib/systemd/system', 'lib/systemd/system'):
+                from service_units import unit_bases
+                for prefix in unit_bases(self.root):
                     dropins = safe_path(self.root, prefix + '/' + service + '.d')
                     if dropins.exists() and any(dropins.iterdir()):
                         raise ValueError(f'{service} has custom systemd overrides')

@@ -77,12 +77,18 @@ def validate_fragment(text, service):
         raise ValueError('Service has no recognized ExecStart')
 
 
-def validate_service(root, service, safe_path):
+def unit_bases(root):
+    """Return unit search paths, accounting for the standard usrmerge alias."""
     bases = ['usr/lib/systemd/system', 'lib/systemd/system', 'usr/local/lib/systemd/system',
              'run/systemd/system', 'etc/systemd/system']
     if (root / 'lib').is_symlink() and os.readlink(root / 'lib') not in ('usr/lib', '/usr/lib'):
         raise ValueError('Unrecognized /lib symlink')
     bases = [b for b in bases if not (b.startswith('lib/') and (root / 'lib').is_symlink())]
+    return bases
+
+
+def validate_service(root, service, safe_path):
+    bases = unit_bases(root)
     fragment = None
     for base in bases:
         path = safe_path(root, base + '/' + service)

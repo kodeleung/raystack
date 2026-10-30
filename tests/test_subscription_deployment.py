@@ -81,6 +81,21 @@ class SubscriptionDeploymentTests(unittest.TestCase):
             self.install('reality')
         self.assertTrue(drop.exists())
 
+    def test_usrmerge_lib_symlink(self):
+        for target in ('usr/lib', '/usr/lib'):
+            with self.subTest(target=target):
+                lib = self.root / 'lib'
+                lib.symlink_to(target)
+                try:
+                    self.install('reality')
+                finally:
+                    lib.unlink()
+
+    def test_unrecognized_lib_symlink_still_rejected(self):
+        (self.root / 'lib').symlink_to('custom-lib')
+        with self.assertRaisesRegex(ValueError, '/lib symlink'):
+            self.install('reality')
+
     def test_disabling_subscription_stops_services(self):
         self.install('reality')
         self.install('reality', False)
