@@ -5,6 +5,7 @@ source "${PROJECT_DIR}/install.sh"
 [[ "$(printf '1\n' | { prompt_mode >/dev/null; echo "$MODE"; })" == ws ]]
 [[ "$(printf '2\n' | { prompt_mode >/dev/null; echo "$MODE"; })" == reality ]]
 [[ "$(printf '3\n' | { prompt_mode >/dev/null; echo "$MODE"; })" == hy2 ]]
+[[ "$(printf '4\n' | { prompt_mode >/dev/null; echo "$MODE"; })" == 3x-ui ]]
 if prompt_mode </dev/null >/dev/null; then
   echo 'Canceled input must stop installation' >&2
   exit 1

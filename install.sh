@@ -32,16 +32,30 @@ prompt_mode() {
     printf '%s\n' 'Select installation mode:' \
       '  1) VLESS + WebSocket + TLS' \
       '  2) VLESS + TCP + REALITY' \
-      '  3) Hysteria 2'
-    read -r -p 'Choice [1-3]: ' selection || return 1
+      '  3) Hysteria 2' \
+      '  4) 3x-ui panel (official installer)'
+    read -r -p 'Choice [1-4]: ' selection || return 1
     case "$selection" in
       1) MODE=ws; return ;;
       2) MODE=reality; return ;;
       3) MODE=hy2; return ;;
-      *) printf '%s\n' 'Please enter 1, 2, or 3.' ;;
+      4) MODE=3x-ui; return ;;
+      *) printf '%s\n' 'Please enter 1, 2, 3, or 4.' ;;
     esac
   done
 }
+
+install_3x_ui() (
+  local installer
+  installer="$(mktemp)" || return 1
+  trap 'rm -f -- "$installer"' EXIT
+  log 'Existing raystack services remain running. Avoid port conflicts when creating nodes in 3x-ui.'
+  log 'Starting the official 3x-ui installer; configure nodes and subscriptions in the panel afterward.'
+  curl --fail --show-error --silent --location \
+    https://raw.githubusercontent.com/MHSanaei/3x-ui/master/install.sh \
+    --output "$installer" || return 1
+  bash "$installer"
+)
 
 prompt_mode_parameters() {
   if [[ "$MODE" == ws || "$MODE" == hy2 ]]; then
@@ -80,11 +94,17 @@ main() {
   parse_args "$@"
   [[ "$(uname -s)" == Linux ]] || { fail 'Installation requires Linux with systemd'; return 1; }
   if [[ $EUID -ne 0 ]]; then exec sudo bash "${PROJECT_DIR}/install.sh" "$@"; fi
+  require_command curl || return 1
+  require_command systemctl || return 1
+  prompt_mode || return 1
+  if [[ "$MODE" == 3x-ui ]]; then
+    install_3x_ui
+    return $?
+  fi
   local command_name
   for command_name in python3 curl openssl systemctl ss flock useradd; do
     require_command "$command_name" || return 1
   done
-  prompt_mode
   prompt_mode_parameters
   # Do not start deployment when input preparation fails. Credentials stay in memory.
   local prepared options_file

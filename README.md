@@ -1,15 +1,21 @@
 # raystack
 
-An interactive Linux installer for **one proxy mode at a time**:
+An interactive Linux installer with three managed proxy modes and a 3x-ui installation option:
 
 1. **VLESS + WebSocket + TLS** — Xray behind Caddy, with automatic HTTPS.
 2. **VLESS + TCP + REALITY** — Xray with Vision, without a domain or certificate requirement.
 3. **Hysteria 2** — QUIC over UDP, with its own automatic certificate management.
+4. **3x-ui panel** — runs the upstream official installer; manage protocols, users,
+   traffic limits, and subscriptions in its web panel afterward.
 
 The entry point is Bash. Python 3 handles configuration serialization, installation
 recognition, backups, and service changes using only its standard library.
 
 ## Requirements
+
+The requirements below apply to managed modes 1–3. Option 4 requires Linux with
+systemd, root access (or sudo), and `curl`; the official 3x-ui installer handles
+its own supported platforms and dependencies.
 
 - Linux with systemd, root access (or sudo), and an amd64 or arm64 CPU.
 - `python3`, `curl`, `openssl`, `systemctl`, `ss`, `flock`, and `useradd`.
@@ -32,7 +38,15 @@ sudo apt-get install -y python3 curl openssl ca-certificates iproute2 util-linux
 sudo bash ./install.sh
 ```
 
-Choose exactly one mode. HY2 prompts for your domain and email, generates a random
+Choose an option. **Option 4** downloads and runs the
+[official 3x-ui installer](https://github.com/MHSanaei/3x-ui), preserving its
+interactive setup. It skips raystack's node and traffic-subscription setup.
+Existing raystack services and configurations remain in place: avoid occupied
+ports when creating nodes in the panel. This option does not migrate existing
+nodes or participate in raystack's backup/rollback and mode-switching mechanism.
+For subsequent panel management, use the upstream `x-ui` command.
+
+For modes 1–3, raystack manages one proxy mode at a time. HY2 prompts for your domain and email, generates a random
 password, and obtains/renews a Let's Encrypt certificate itself; Caddy is only
 used by WS. Required public inbound access:
 
@@ -47,6 +61,8 @@ both on the server firewall and in your provider's security group. The installer
 checks local conflicts but does not change either firewall.
 
 ## Reinstall and switch modes
+
+This section applies to managed modes 1–3.
 
 Reinstalling the same mode reuses its saved UUID, REALITY keys, or HY2 password.
 Selecting a different mode **automatically removes the old raystack mode and
