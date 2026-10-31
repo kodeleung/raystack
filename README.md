@@ -14,8 +14,9 @@ recognition, backups, and service changes using only its standard library.
 ## Requirements
 
 The requirements below apply to managed modes 1–3. Option 4 requires Linux with
-systemd, root access (or sudo), and `curl`; the official 3x-ui installer handles
-its own supported platforms and dependencies.
+systemd, root access (or sudo), and `curl`. Its optional Caddy automation also
+requires Python 3.9+ and `useradd`; the official 3x-ui installer handles its own
+supported platforms and dependencies.
 
 - Linux with systemd, root access (or sudo), and an amd64 or arm64 CPU.
 - `python3`, `curl`, `openssl`, `systemctl`, `ss`, `flock`, and `useradd`.
@@ -39,12 +40,49 @@ sudo bash ./install.sh
 ```
 
 Choose an option. **Option 4** downloads and runs the
-[official 3x-ui installer](https://github.com/MHSanaei/3x-ui), preserving its
-interactive setup. It skips raystack's node and traffic-subscription setup.
+[official 3x-ui installer](https://github.com/MHSanaei/3x-ui). It first asks whether
+to configure Caddy HTTPS (default yes). Choose no to keep upstream's interactive
+setup. It skips raystack's node and traffic-subscription setup.
 Existing raystack services and configurations remain in place: avoid occupied
 ports when creating nodes in the panel. This option does not migrate existing
-nodes or participate in raystack's backup/rollback and mode-switching mechanism.
+nodes or participate in raystack's proxy mode-switching mechanism.
 For subsequent panel management, use the upstream `x-ui` command.
+
+### Automatic 3x-ui HTTPS
+
+Enter two distinct DNS-only domains pointing to the VPS: one for the panel and
+one for subscriptions. Open inbound TCP 80 and 443. In this mode, the upstream
+installer runs unattended with SQLite and no internal TLS, and prints its
+generated login credentials. Existing credentials are retained by upstream.
+
+The integration installs or reuses Caddy and adds a managed site file at
+`/etc/caddy/raystack-3x-ui.caddy`, imported from `/etc/caddy/Caddyfile`. Other sites
+are retained. An existing site for either requested domain causes a conflict
+message; it is not overwritten. Existing Caddy services must use this standard
+Caddyfile location. PostgreSQL/custom database deployments are not supported by
+this automation.
+
+The panel and subscription bind to localhost over HTTP. Valid existing internal
+ports are retained; public port conflicts (80/443) use internal defaults instead.
+Only Caddy serves public HTTPS. Public subscription URL settings are configured
+without internal ports, and standard subscriptions automatically return Clash
+YAML for Clash/Mihomo clients. Create inbounds and clients in the panel afterward.
+Do not enable internal subscription TLS or change its port to 443 in the panel.
+
+Before HTTPS configuration changes, the integration saves the SQLite database,
+affected Caddy files, and service states in a private
+`/etc/raystack/backups/<timestamp>-3x-ui-<suffix>/` directory. Local validation or
+activation failures restore those settings and service states. This backup is
+made **after** upstream installation; it does not undo upstream upgrades, package
+installation, or the upstream installer itself.
+
+The completion summary prints the panel URL, subscription bases, and actual
+certificate/private-key paths found in the running Caddy service's storage. If
+issuance is still pending after 30 seconds, it reports that status and DNS/port/log
+checks instead of inventing file paths. Caddy renews its certificates automatically.
+Hysteria2 inbounds can reference a certificate for the same hostname, but require
+appropriate read permissions and certificate reload after renewal; the automation
+does not configure Hysteria2 certificates, permissions, or reload hooks.
 
 For modes 1–3, raystack manages one proxy mode at a time. HY2 prompts for your domain and email, generates a random
 password, and obtains/renews a Let's Encrypt certificate itself; Caddy is only

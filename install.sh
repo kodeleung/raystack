@@ -46,7 +46,8 @@ prompt_mode() {
 }
 
 install_3x_ui() (
-  local installer
+  local installer configure_caddy
+  read -r -p 'Configure Caddy HTTPS for the panel and subscription? [Y/n]: ' configure_caddy || return 1
   installer="$(mktemp)" || return 1
   trap 'rm -f -- "$installer"' EXIT
   log 'Existing raystack services remain running. Avoid port conflicts when creating nodes in 3x-ui.'
@@ -54,7 +55,13 @@ install_3x_ui() (
   curl --fail --show-error --silent --location \
     https://raw.githubusercontent.com/MHSanaei/3x-ui/master/install.sh \
     --output "$installer" || return 1
-  bash "$installer"
+  case "$configure_caddy" in
+    n|N|no|NO) bash "$installer" ;;
+    *)
+      require_command python3 || return 1
+      python3 "${SCRIPTS_DIR}/xui_caddy.py" "$installer"
+      ;;
+  esac
 )
 
 prompt_mode_parameters() {

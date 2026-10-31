@@ -27,11 +27,25 @@ INSTALLER
 }
 
 status=0
-install_3x_ui <<< 'panel-setup' > /dev/null || status=$?
+install_3x_ui <<< $'n\npanel-setup' > /dev/null || status=$?
 [[ "$status" == 42 ]] # Preserve upstream exit status and interactive stdin.
 [[ ! -e "$(cat "$TEST_DIR/download-path")" ]]
 
+# Default automation dispatches to the Python integration, without running the
+# upstream script separately or consuming its domain answers in the shell.
+python3() {
+  [[ "$1" == "${SCRIPTS_DIR}/xui_caddy.py" ]] || return 97
+  [[ -f "$2" ]] || return 96
+  local panel subscription
+  read -r panel
+  read -r subscription
+  [[ "$panel" == panel.example.com && "$subscription" == sub.example.com ]] || return 95
+  return 0
+}
+install_3x_ui <<< $'\npanel.example.com\nsub.example.com' > /dev/null
+[[ ! -e "$(cat "$TEST_DIR/download-path")" ]]
+
 status=0
-DOWNLOAD_FAIL=1 install_3x_ui > /dev/null || status=$?
+DOWNLOAD_FAIL=1 install_3x_ui <<< 'n' > /dev/null || status=$?
 [[ "$status" == 1 ]] # Do not execute a partial download.
 [[ ! -e "$(cat "$TEST_DIR/download-path")" ]]
